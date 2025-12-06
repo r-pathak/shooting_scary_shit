@@ -203,7 +203,9 @@ export const useStore = create<GameState>((set, get) => ({
     score: 0, 
     isGameOver: false, 
     isLoading: false,
-    loadingProgress: 0,
+    loadingProgress: 100,
+    zombiesReady: true, // Keep zombies ready so we don't show loading screen again
+    damageFlash: false,
     enemies: [],
     currentWeapon: 'Rifle',
     unlockedWeapons: ['Pistol', 'SMG', 'Rifle'],

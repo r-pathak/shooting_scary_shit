@@ -74,7 +74,8 @@ export const UI = () => {
         <div style={{
             position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(0,0,0,0.8)', color: 'white', fontFamily: 'monospace'
+            background: 'rgba(0,0,0,0.9)', color: 'white', fontFamily: 'monospace',
+            zIndex: 1000
         }}>
             <h1 style={{ fontSize: '48px', margin: '10px' }}>GAME OVER</h1>
             <h2 style={{ fontSize: '32px', margin: '10px' }}>Score: {score}</h2>
@@ -125,7 +126,8 @@ export const UI = () => {
                   border: 'none',
                   borderRadius: '5px',
                   fontFamily: 'monospace',
-                  fontWeight: 'bold'
+                  fontWeight: 'bold',
+                  pointerEvents: 'auto'
                 }}
             >
                 Try Again
