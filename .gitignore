@@ -23,5 +23,4 @@ dist-ssr
 *.sln
 *.sw?
 
-# Large assets - initially excluded, will be added with Git LFS
-public/
+# Large assets are now tracked with Git LFS
