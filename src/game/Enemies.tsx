@@ -94,6 +94,12 @@ const Zombie = ({ id, position, health, playerPosition, type }: EnemyType & { pl
   const speed = type === 'runner' ? 3 : (type === 'tank' ? 0.6 : 2)
   const scale = type === 'tank' ? 1.15 : (type === 'runner' ? 0.85 : 1)
   const maxHealth = type === 'tank' ? 300 : (type === 'runner' ? 50 : 100)
+  
+  // Attack timing - only deal damage at the end of attack animation
+  const attackStartTimeRef = useRef<number | null>(null)
+  const attackDamageDealtRef = useRef(false)
+  const ATTACK_DURATION = 0.8 // seconds - how long the attack animation takes before dealing damage
+  const ATTACK_COOLDOWN = 1.5 // seconds - time between attacks
 
   useEffect(() => {
     // Small delay to ensure physics body is initialized
@@ -155,17 +161,40 @@ const Zombie = ({ id, position, health, playerPosition, type }: EnemyType & { pl
     // Distance culling: Don't update enemies far away
     if (distToPlayer > 100) return
     
-    // Attack radius of 1.5 units - deal damage when in range
+    const now = performance.now() / 1000 // Convert to seconds
+    
+    // Attack radius of 1.5 units
     if (distToPlayer <= 1.5) {
-        setAnimState('attack')
+        // Start attack if not already attacking
+        if (attackStartTimeRef.current === null) {
+            attackStartTimeRef.current = now
+            attackDamageDealtRef.current = false
+            setAnimState('attack')
+        }
+        
         const vel = body.current.linvel()
         body.current.setLinvel({ x: 0, y: vel.y, z: 0 }, true)
         
-        // Deal damage periodically when in attack range (every ~1 second)
-        if (frameCounterRef.current % 60 === 0) {
-            useStore.getState().decreaseHealth(10)
+        // Deal damage only after attack animation completes, and only once per attack
+        const attackElapsed = now - attackStartTimeRef.current
+        if (attackElapsed >= ATTACK_DURATION && !attackDamageDealtRef.current) {
+            // Only deal damage if still in range when attack finishes
+            if (distToPlayer <= 1.8) {
+                useStore.getState().decreaseHealth(15)
+            }
+            attackDamageDealtRef.current = true
+        }
+        
+        // Reset attack after cooldown for next swing
+        if (attackElapsed >= ATTACK_COOLDOWN) {
+            attackStartTimeRef.current = null
+            attackDamageDealtRef.current = false
         }
     } else {
+        // Player moved away - reset attack state
+        attackStartTimeRef.current = null
+        attackDamageDealtRef.current = false
+        
         setAnimState('walk')
         const direction = new THREE.Vector3()
         // Slow-mo power-up reduces enemy speed to 25%

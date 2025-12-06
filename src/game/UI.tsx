@@ -31,7 +31,8 @@ const saveHighScore = (score: number): number[] => {
 }
 
 export const UI = () => {
-  const { health, ammo, score, isGameOver, reset, currentWeapon, kills, unlockedWeapons, isReloading, activePowerUps } = useStore()
+  const { health, ammo, score, isGameOver, reset, currentWeapon, kills, unlockedWeapons, isReloading, activePowerUps, damageFlash } = useStore()
+  const setDamageFlash = useStore(state => state.setDamageFlash)
   const weaponStats = WEAPONS[currentWeapon]
   const currentAmmo = ammo[currentWeapon]
   const currentKills = kills[currentWeapon]
@@ -43,6 +44,16 @@ export const UI = () => {
     const interval = setInterval(() => forceUpdate(n => n + 1), 100)
     return () => clearInterval(interval)
   }, [])
+  
+  // Handle damage flash timeout with proper cleanup
+  useEffect(() => {
+    if (damageFlash) {
+      const timer = setTimeout(() => {
+        setDamageFlash(false)
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [damageFlash, setDamageFlash])
   
   // Load high scores on mount and save when game over
   useEffect(() => {
@@ -138,7 +149,6 @@ export const UI = () => {
 
   // Check if shield is active
   const hasShield = activePowerUps.some(p => p.type === 'shield' && p.expiresAt > Date.now())
-  const damageFlash = useStore(state => state.damageFlash)
 
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>

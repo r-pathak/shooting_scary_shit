@@ -104,7 +104,7 @@ interface GameState {
   setLoading: (loading: boolean) => void
   setLoadingProgress: (progress: number) => void
   setZombiesReady: (ready: boolean) => void
-  triggerDamageFlash: () => void
+  setDamageFlash: (flash: boolean) => void
   
   setWeapon: (weapon: WeaponType) => void
   shootAmmo: () => boolean
@@ -168,15 +168,12 @@ export const useStore = create<GameState>((set, get) => ({
     const newHealth = Math.max(0, state.health - amount)
     const gameOver = newHealth <= 0
     
-    // Trigger damage flash
-    set({ damageFlash: true })
-    setTimeout(() => set({ damageFlash: false }), 150)
-    
     // Clear everything when game ends to prevent browser lag
     if (gameOver) {
       set({ 
         health: 0, 
         isGameOver: true,
+        damageFlash: false,
         enemies: [],
         powerUps: [],
         healthPickups: [],
@@ -185,7 +182,8 @@ export const useStore = create<GameState>((set, get) => ({
       return
     }
     
-    set({ health: newHealth })
+    // Trigger damage flash (UI will handle the timeout)
+    set({ health: newHealth, damageFlash: true })
   },
 
   addScore: (amount) => set((state) => ({ score: state.score + amount })),
@@ -193,10 +191,7 @@ export const useStore = create<GameState>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
   setLoadingProgress: (progress) => set({ loadingProgress: progress }),
   setZombiesReady: (ready) => set({ zombiesReady: ready }),
-  triggerDamageFlash: () => {
-    set({ damageFlash: true })
-    setTimeout(() => set({ damageFlash: false }), 150)
-  },
+  setDamageFlash: (flash: boolean) => set({ damageFlash: flash }),
 
   reset: () => set({ 
     health: 100, 
