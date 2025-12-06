@@ -59,6 +59,8 @@ interface GameState {
   health: number
   score: number
   isGameOver: boolean
+  isLoading: boolean
+  loadingProgress: number
   
   currentWeapon: WeaponType
   unlockedWeapons: WeaponType[]
@@ -72,6 +74,8 @@ interface GameState {
   decreaseHealth: (amount: number) => void
   addScore: (amount: number) => void
   reset: () => void
+  setLoading: (loading: boolean) => void
+  setLoadingProgress: (progress: number) => void
   
   setWeapon: (weapon: WeaponType) => void
   shootAmmo: () => boolean
@@ -86,6 +90,8 @@ export const useStore = create<GameState>((set, get) => ({
   health: 100,
   score: 0,
   isGameOver: false,
+  isLoading: true,
+  loadingProgress: 0,
   
   currentWeapon: 'Pistol',
   unlockedWeapons: ['Pistol', 'SMG', 'Rifle'],
@@ -111,10 +117,15 @@ export const useStore = create<GameState>((set, get) => ({
 
   addScore: (amount) => set((state) => ({ score: state.score + amount })),
 
+  setLoading: (loading) => set({ isLoading: loading }),
+  setLoadingProgress: (progress) => set({ loadingProgress: progress }),
+
   reset: () => set({ 
     health: 100, 
     score: 0, 
     isGameOver: false, 
+    isLoading: false,
+    loadingProgress: 0,
     enemies: [],
     currentWeapon: 'Pistol',
     unlockedWeapons: ['Pistol', 'SMG', 'Rifle'],

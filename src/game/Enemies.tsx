@@ -126,9 +126,11 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
             })
         }, (progress) => {
             console.log('Loading zombie_idle.fbx:', progress)
-        }, (error) => {
+        }, (error: unknown) => {
             console.error('Failed to load zombie model:', error)
-            console.error('Error details:', error.message, error.url)
+            if (error instanceof Error) {
+                console.error('Error details:', error.message)
+            }
             // Model will fall back to GeometricZombie
         })
     }, [])
@@ -216,12 +218,22 @@ const Zombie = ({ id, position, health, playerPosition, type }: EnemyType & { pl
     }
   }, [id])
 
+  const frameCounterRef = useRef(0)
+  
   useFrame(() => {
     if (!body.current) return
+    
+    // Optimize: Only update every 2 frames (30fps instead of 60fps for AI)
+    frameCounterRef.current++
+    if (frameCounterRef.current % 2 !== 0) return
+    
     const pos = body.current.translation()
     const enemyPos = new THREE.Vector3(pos.x, pos.y, pos.z)
     
     const distToPlayer = enemyPos.distanceTo(playerPosition)
+    
+    // Distance culling: Don't update enemies far away
+    if (distToPlayer > 100) return
     
     if (distToPlayer <= 2) {
         setAnimState('attack')
@@ -275,23 +287,30 @@ export const Enemies = () => {
   const spawnEnemy = useStore(state => state.spawnEnemy)
   const playerPosition = useRef(new THREE.Vector3())
   const spawnTimerRef = useRef(0)
+  const updateCounterRef = useRef(0)
 
+  // Optimize spawn logic - only check every few frames
   useFrame((_, delta) => {
-      const score = useStore.getState().score
-      const enemyCount = useStore.getState().enemies.length
-      
-      const baseInterval = 2.5
-      const speedBonus = Math.min(score / 1000, 1.5)
-      const spawnInterval = Math.max(1.0, baseInterval - speedBonus)
-      const maxEnemies = Math.min(25, 10 + Math.floor(score / 500))
-      
-      spawnTimerRef.current += delta
-      if (spawnTimerRef.current >= spawnInterval && enemyCount < maxEnemies) {
-          spawnEnemy()
-          spawnTimerRef.current = 0
+      updateCounterRef.current++
+      // Only update spawn logic every 10 frames (roughly 6 times per second at 60fps)
+      if (updateCounterRef.current % 10 === 0) {
+          const score = useStore.getState().score
+          const enemyCount = useStore.getState().enemies.length
+          
+          const baseInterval = 2.5
+          const speedBonus = Math.min(score / 1000, 1.5)
+          const spawnInterval = Math.max(1.0, baseInterval - speedBonus)
+          const maxEnemies = Math.min(25, 10 + Math.floor(score / 500))
+          
+          spawnTimerRef.current += delta * 10 // Multiply by 10 since we're checking less frequently
+          if (spawnTimerRef.current >= spawnInterval && enemyCount < maxEnemies) {
+              spawnEnemy()
+              spawnTimerRef.current = 0
+          }
       }
   })
   
+  // Update player position every frame (needed for enemy AI)
   useFrame(({ camera }) => {
      playerPosition.current.copy(camera.position)
      playerPosition.current.y = 0

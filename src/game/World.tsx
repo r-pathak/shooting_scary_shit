@@ -21,41 +21,58 @@ const Ground = () => {
   )
 }
 
-// Tree wall around perimeter
+// Tree wall around perimeter - optimized with instancing
 const TreeWall = () => {
   const { scene } = useGLTF('/tree_pine.glb')
   
-  const treePositions = useMemo(() => {
+  const treeData = useMemo(() => {
     const positions: [number, number, number][] = []
+    const scales: number[] = []
+    const rotations: number[] = []
     const edgeDistance = 48
     const spacing = 8
     
     // North edge
     for (let x = -edgeDistance; x <= edgeDistance; x += spacing) {
       positions.push([x, 0, -edgeDistance])
+      scales.push(0.1 + Math.random() * 0.05)
+      rotations.push(Math.random() * Math.PI * 2)
     }
     // South edge
     for (let x = -edgeDistance; x <= edgeDistance; x += spacing) {
       positions.push([x, 0, edgeDistance])
+      scales.push(0.1 + Math.random() * 0.05)
+      rotations.push(Math.random() * Math.PI * 2)
     }
     // East edge (skip corners)
     for (let z = -edgeDistance + spacing; z < edgeDistance; z += spacing) {
       positions.push([edgeDistance, 0, z])
+      scales.push(0.1 + Math.random() * 0.05)
+      rotations.push(Math.random() * Math.PI * 2)
     }
     // West edge (skip corners)
     for (let z = -edgeDistance + spacing; z < edgeDistance; z += spacing) {
       positions.push([-edgeDistance, 0, z])
+      scales.push(0.1 + Math.random() * 0.05)
+      rotations.push(Math.random() * Math.PI * 2)
     }
     
-    return positions
+    return { positions, scales, rotations }
   }, [])
+  
+  // Use React.memo to prevent unnecessary re-renders
+  const TreeInstance = useMemo(() => {
+    return ({ pos, scale, rotation }: { pos: [number, number, number], scale: number, rotation: number }) => (
+      <group position={pos} scale={scale} rotation={[0, rotation, 0]}>
+        <primitive object={scene.clone()} />
+      </group>
+    )
+  }, [scene])
   
   return (
     <>
-      {treePositions.map((pos, i) => (
-        <group key={i} position={pos}>
-          <primitive object={scene.clone()} scale={0.1 + Math.random() * 0.05} rotation={[0, Math.random() * Math.PI * 2, 0]} />
-        </group>
+      {treeData.positions.map((pos, i) => (
+        <TreeInstance key={i} pos={pos} scale={treeData.scales[i]} rotation={treeData.rotations[i]} />
       ))}
     </>
   )
