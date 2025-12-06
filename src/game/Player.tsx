@@ -6,8 +6,9 @@ import { Vector3 } from 'three'
 import { useStore, WEAPONS } from './store'
 import { enemyPositionMap } from './Enemies'
 
-const SPEED = 5
+const BASE_SPEED = 6
 const JUMP_FORCE = 1
+
 
 export const Player = () => {
   const body = useRef<RapierRigidBody>(null)
@@ -124,7 +125,7 @@ export const Player = () => {
           if (!currentPos) continue
           
           // Enemy position is at their feet, offset to body center based on type
-          const scale = enemy.type === 'tank' ? 1.4 : (enemy.type === 'runner' ? 0.85 : 1)
+          const scale = enemy.type === 'tank' ? 1.15 : (enemy.type === 'runner' ? 0.85 : 1)
           const bodyHeight = 1.0 * scale // Center of body
           const enemyPos = new THREE.Vector3(currentPos[0], currentPos[1] + bodyHeight, currentPos[2])
           
@@ -143,8 +144,8 @@ export const Player = () => {
           // Distance from ray to enemy center
           const distanceToRay = closestPoint.distanceTo(enemyPos)
           
-          // Hit radius based on enemy type - tanks are 1.4x scale so bigger hitbox
-          const hitRadius = enemy.type === 'tank' ? 1.5 : (enemy.type === 'runner' ? 0.5 : 0.7)
+          // Hit radius based on enemy type - tanks are 1.15x scale so slightly bigger hitbox
+          const hitRadius = enemy.type === 'tank' ? 1.0 : (enemy.type === 'runner' ? 0.5 : 0.7)
           
           // Check if ray passes close enough to enemy
           if (distanceToRay < hitRadius && projectionLength < 100) {
@@ -165,10 +166,21 @@ export const Player = () => {
       
       // Apply damage to closest hit enemy
       if (closestHit) {
-          const damage = closestHit.isHeadshot ? stats.damage * 2.5 : stats.damage
+          // Ray gun does massive damage: 150 for walkers (2-shot), 300 for others (1-shot)
+          const hasRaygun = useStore.getState().hasPowerUp('raygun')
+          let damage: number
+          
+          if (hasRaygun) {
+              // Find enemy type for ray gun damage calculation
+              const enemy = enemies.find(e => e.id === closestHit.id)
+              damage = enemy?.type === 'walker' ? 150 : 300
+          } else {
+              damage = closestHit.isHeadshot ? stats.damage * 2.5 : stats.damage
+          }
+          
           useStore.getState().damageEnemy(closestHit.id, damage)
           
-          if (closestHit.isHeadshot) {
+          if (closestHit.isHeadshot && !hasRaygun) {
               console.log('HEADSHOT!')
           }
       }
@@ -176,6 +188,15 @@ export const Player = () => {
 
   // Main game loop
   useFrame((_state, delta) => {
+      // Stop everything if game is over
+      if (useStore.getState().isGameOver) {
+          if (body.current) {
+              const vel = body.current.linvel()
+              body.current.setLinvel({ x: 0, y: vel.y, z: 0 }, true)
+          }
+          return
+      }
+      
       // Handle shooting
       if (isMouseDown.current) {
           attemptShoot()
@@ -219,7 +240,10 @@ export const Player = () => {
       const frontVector = new Vector3(0, 0, (backward ? 1 : 0) - (forward ? 1 : 0))
       const sideVector = new Vector3((left ? 1 : 0) - (right ? 1 : 0), 0, 0)
       const direction = new Vector3()
-      direction.subVectors(frontVector, sideVector).normalize().multiplyScalar(SPEED).applyEuler(camera.rotation)
+      // Speed boost increases movement speed by 30%
+      const hasSpeedBoost = useStore.getState().hasPowerUp('speed')
+      const currentSpeed = hasSpeedBoost ? BASE_SPEED * 1.3 : BASE_SPEED
+      direction.subVectors(frontVector, sideVector).normalize().multiplyScalar(currentSpeed).applyEuler(camera.rotation)
       const vel = body.current.linvel()
       body.current.setLinvel({ x: direction.x, y: vel.y, z: direction.z }, true)
       
@@ -243,6 +267,8 @@ export const Player = () => {
   })
 
   const currentWeapon = useStore(state => state.currentWeapon)
+  const activePowerUps = useStore(state => state.activePowerUps)
+  const hasRaygun = activePowerUps.some(p => p.type === 'raygun' && p.expiresAt > Date.now())
 
   return (
     <>
@@ -265,7 +291,53 @@ export const Player = () => {
         
         {/* FPS Weapon - updated every frame in useFrame */}
         <group ref={weaponGroupRef}>
-            {currentWeapon === 'Pistol' && (
+            {/* Ray Gun - shown when raygun power-up is active */}
+            {hasRaygun && (
+                <group scale={1.8}>
+                    {/* Main body - purple futuristic design */}
+                    <mesh position={[0, 0, -0.1]}>
+                        <boxGeometry args={[0.05, 0.06, 0.25]} />
+                        <meshStandardMaterial color="#9932CC" metalness={0.8} roughness={0.2} emissive="#6B238E" emissiveIntensity={0.5} />
+                    </mesh>
+                    {/* Energy core - glowing center */}
+                    <mesh position={[0, 0.02, 0.02]}>
+                        <sphereGeometry args={[0.03, 16, 16]} />
+                        <meshStandardMaterial color="#FF00FF" emissive="#FF00FF" emissiveIntensity={2} />
+                    </mesh>
+                    {/* Barrel - front section */}
+                    <mesh position={[0, 0, -0.28]} rotation={[Math.PI / 2, 0, 0]}>
+                        <cylinderGeometry args={[0.015, 0.025, 0.12, 16]} />
+                        <meshStandardMaterial color="#7B68EE" metalness={0.9} roughness={0.1} />
+                    </mesh>
+                    {/* Energy rings around barrel */}
+                    <mesh position={[0, 0, -0.24]} rotation={[Math.PI / 2, 0, 0]}>
+                        <torusGeometry args={[0.03, 0.005, 8, 16]} />
+                        <meshStandardMaterial color="#00FFFF" emissive="#00FFFF" emissiveIntensity={1} />
+                    </mesh>
+                    <mesh position={[0, 0, -0.30]} rotation={[Math.PI / 2, 0, 0]}>
+                        <torusGeometry args={[0.025, 0.005, 8, 16]} />
+                        <meshStandardMaterial color="#00FFFF" emissive="#00FFFF" emissiveIntensity={1} />
+                    </mesh>
+                    {/* Grip */}
+                    <mesh position={[0, -0.08, 0.04]}>
+                        <boxGeometry args={[0.035, 0.1, 0.05]} />
+                        <meshStandardMaterial color="#4B0082" roughness={0.6} />
+                    </mesh>
+                    {/* Trigger */}
+                    <mesh position={[0, -0.04, -0.02]}>
+                        <boxGeometry args={[0.015, 0.03, 0.02]} />
+                        <meshStandardMaterial color="#1a1a1a" />
+                    </mesh>
+                    {/* Muzzle flash - purple energy */}
+                    {showMuzzleFlash && (
+                        <mesh position={[0, 0, -0.38]}>
+                            <sphereGeometry args={[0.05, 8, 8]} />
+                            <meshBasicMaterial color="#FF00FF" />
+                        </mesh>
+                    )}
+                </group>
+            )}
+            {!hasRaygun && currentWeapon === 'Pistol' && (
                 <group scale={2}>
                     {/* Slide */}
                     <mesh position={[0, 0.02, -0.08]}>
@@ -296,7 +368,7 @@ export const Player = () => {
                     )}
                 </group>
             )}
-            {currentWeapon === 'SMG' && (
+            {!hasRaygun && currentWeapon === 'SMG' && (
                 <group scale={1.8}>
                     {/* Barrel */}
                     <mesh position={[0, 0, -0.18]}>
@@ -332,7 +404,7 @@ export const Player = () => {
                     )}
                 </group>
             )}
-            {currentWeapon === 'Rifle' && (
+            {!hasRaygun && currentWeapon === 'Rifle' && (
                 <group scale={1.5}>
                     {/* Barrel */}
                     <mesh position={[0, 0, -0.32]}>

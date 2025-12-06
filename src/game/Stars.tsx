@@ -51,7 +51,7 @@ export const Stars = () => {
           anchorY="middle"
           fillOpacity={0.4}
         >
-          SHOOTING SCARY SHIT - THE GAME
+          SHOOTING SCARY BASTARDS - THE GAME
         </Text>
         <Text
           position={[0, -6, 0]}

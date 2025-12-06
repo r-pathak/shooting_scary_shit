@@ -3,6 +3,24 @@ import { v4 as uuidv4 } from 'uuid'
 
 // --- Types ---
 export type WeaponType = 'Pistol' | 'SMG' | 'Rifle'
+export type PowerUpType = 'raygun' | 'shield' | 'speed' | 'slowmo' | 'noreload'
+
+export interface PowerUp {
+  id: string
+  type: PowerUpType
+  position: [number, number, number]
+}
+
+export interface HealthPickup {
+  id: string
+  amount: 20 | 30
+  position: [number, number, number]
+}
+
+export interface ActivePowerUp {
+  type: PowerUpType
+  expiresAt: number
+}
 
 export interface WeaponStats {
   name: WeaponType
@@ -40,7 +58,7 @@ export const WEAPONS: Record<WeaponType, WeaponStats> = {
     name: 'Rifle',
     damage: 20,
     fireRate: 150,
-    magSize: 30,
+    magSize: 45,
     reloadTime: 2000,
     automatic: true,
     recoil: 0.3,
@@ -71,6 +89,13 @@ interface GameState {
   
   enemies: Enemy[]
   
+  // Power-ups
+  powerUps: PowerUp[]
+  activePowerUps: ActivePowerUp[]
+  
+  // Health pickups
+  healthPickups: HealthPickup[]
+  
   decreaseHealth: (amount: number) => void
   addScore: (amount: number) => void
   reset: () => void
@@ -84,6 +109,17 @@ interface GameState {
   
   spawnEnemy: () => void
   damageEnemy: (id: string, amount: number) => void
+  
+  // Power-up actions
+  spawnPowerUp: () => void
+  collectPowerUp: (id: string) => void
+  removePowerUp: (id: string) => void
+  hasPowerUp: (type: PowerUpType) => boolean
+  cleanExpiredPowerUps: () => void
+  
+  // Health pickup actions
+  spawnHealthPickup: () => void
+  collectHealthPickup: (id: string) => void
 }
 
 export const useStore = create<GameState>((set, get) => ({
@@ -93,7 +129,7 @@ export const useStore = create<GameState>((set, get) => ({
   isLoading: true,
   loadingProgress: 0,
   
-  currentWeapon: 'Pistol',
+  currentWeapon: 'Rifle',
   unlockedWeapons: ['Pistol', 'SMG', 'Rifle'],
   ammo: {
     Pistol: WEAPONS.Pistol.magSize,
@@ -109,11 +145,36 @@ export const useStore = create<GameState>((set, get) => ({
   isReloading: false,
   
   enemies: [],
+  
+  // Power-ups
+  powerUps: [],
+  activePowerUps: [],
+  
+  // Health pickups
+  healthPickups: [],
 
-  decreaseHealth: (amount) => set((state) => ({ 
-    health: Math.max(0, state.health - amount), 
-    isGameOver: state.health - amount <= 0 
-  })),
+  decreaseHealth: (amount) => set((state) => {
+    // Shield blocks all damage
+    const hasShield = state.activePowerUps.some(p => p.type === 'shield' && p.expiresAt > Date.now())
+    if (hasShield) return {}
+    
+    const newHealth = Math.max(0, state.health - amount)
+    const gameOver = newHealth <= 0
+    
+    // Clear everything when game ends to prevent browser lag
+    if (gameOver) {
+      return { 
+        health: 0, 
+        isGameOver: true,
+        enemies: [],
+        powerUps: [],
+        healthPickups: [],
+        activePowerUps: []
+      }
+    }
+    
+    return { health: newHealth }
+  }),
 
   addScore: (amount) => set((state) => ({ score: state.score + amount })),
 
@@ -127,7 +188,7 @@ export const useStore = create<GameState>((set, get) => ({
     isLoading: false,
     loadingProgress: 0,
     enemies: [],
-    currentWeapon: 'Pistol',
+    currentWeapon: 'Rifle',
     unlockedWeapons: ['Pistol', 'SMG', 'Rifle'],
     ammo: {
       Pistol: WEAPONS.Pistol.magSize,
@@ -139,7 +200,10 @@ export const useStore = create<GameState>((set, get) => ({
         SMG: 0,
         Rifle: 0
     },
-    isReloading: false
+    isReloading: false,
+    powerUps: [],
+    activePowerUps: [],
+    healthPickups: []
   }),
 
   setWeapon: (weapon) => {
@@ -151,6 +215,12 @@ export const useStore = create<GameState>((set, get) => ({
 
   shootAmmo: () => {
     const state = get()
+    // No reload power-up = unlimited ammo
+    const hasNoReload = state.activePowerUps.some(p => p.type === 'noreload' && p.expiresAt > Date.now())
+    if (hasNoReload) {
+      return true // Always allow shooting, don't consume ammo
+    }
+    
     const currentAmmo = state.ammo[state.currentWeapon]
     if (currentAmmo > 0) {
       set((state) => ({
@@ -199,10 +269,13 @@ export const useStore = create<GameState>((set, get) => ({
       e.id === id ? { ...e, health: e.health - amount } : e
     )
     
-    if (willDie) {
+    if (willDie && targetEnemy) {
        const currentKills = state.kills[state.currentWeapon] + 1
        const newKills = { ...state.kills, [state.currentWeapon]: currentKills }
        const newUnlocked = [...state.unlockedWeapons]
+       
+       // Score based on enemy type: tank=200, walker=100, runner=50
+       const scoreValue = targetEnemy.type === 'tank' ? 200 : (targetEnemy.type === 'runner' ? 50 : 100)
 
        // Remove the dead enemy after a delay (for die animation)
        setTimeout(() => {
@@ -213,12 +286,85 @@ export const useStore = create<GameState>((set, get) => ({
 
        return { 
            enemies: updatedEnemies, 
-           score: state.score + 100,
+           score: state.score + scoreValue,
            kills: newKills,
            unlockedWeapons: newUnlocked
        }
     }
     
     return { enemies: updatedEnemies }
+  }),
+  
+  // Power-up actions
+  spawnPowerUp: () => {
+    const types: PowerUpType[] = ['raygun', 'shield', 'speed', 'slowmo', 'noreload']
+    const type = types[Math.floor(Math.random() * types.length)]
+    
+    set((state) => ({
+      powerUps: [...state.powerUps, {
+        id: uuidv4(),
+        type,
+        position: [(Math.random() - 0.5) * 40, 1.5, (Math.random() - 0.5) * 40]
+      }]
+    }))
+  },
+  
+  collectPowerUp: (id) => set((state) => {
+    const powerUp = state.powerUps.find(p => p.id === id)
+    if (!powerUp) return {}
+    
+    // Duration in ms
+    const durations: Record<PowerUpType, number> = {
+      raygun: 30000,    // 30s
+      shield: 30000,    // 30s
+      speed: 30000,     // 30s
+      slowmo: 20000,    // 20s
+      noreload: 45000   // 45s
+    }
+    
+    // Only one power-up at a time - replace any existing
+    return {
+      powerUps: state.powerUps.filter(p => p.id !== id),
+      activePowerUps: [
+        { type: powerUp.type, expiresAt: Date.now() + durations[powerUp.type] }
+      ]
+    }
+  }),
+  
+  removePowerUp: (id) => set((state) => ({
+    powerUps: state.powerUps.filter(p => p.id !== id)
+  })),
+  
+  hasPowerUp: (type) => {
+    const state = get()
+    return state.activePowerUps.some(p => p.type === type && p.expiresAt > Date.now())
+  },
+  
+  cleanExpiredPowerUps: () => set((state) => ({
+    activePowerUps: state.activePowerUps.filter(p => p.expiresAt > Date.now())
+  })),
+  
+  // Health pickup actions
+  spawnHealthPickup: () => {
+    const amounts: (20 | 30)[] = [20, 30]
+    const amount = amounts[Math.floor(Math.random() * amounts.length)]
+    
+    set((state) => ({
+      healthPickups: [...state.healthPickups, {
+        id: uuidv4(),
+        amount,
+        position: [(Math.random() - 0.5) * 40, 1, (Math.random() - 0.5) * 40]
+      }]
+    }))
+  },
+  
+  collectHealthPickup: (id) => set((state) => {
+    const pickup = state.healthPickups.find(p => p.id === id)
+    if (!pickup) return {}
+    
+    return {
+      healthPickups: state.healthPickups.filter(p => p.id !== id),
+      health: Math.min(100, state.health + pickup.amount)
+    }
   })
 }))

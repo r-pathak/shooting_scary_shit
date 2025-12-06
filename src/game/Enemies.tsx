@@ -111,9 +111,9 @@ const Zombie = ({ id, position, health, playerPosition, type }: EnemyType & { pl
   const group = useRef<THREE.Group>(null)
   const [animState, setAnimState] = useState<AnimState>('walk')
   
-  // Player speed is 5, zombies max 60% = 3. Bigger = slower
-  const speed = type === 'runner' ? 3 : (type === 'tank' ? 1 : 2)
-  const scale = type === 'tank' ? 1.4 : (type === 'runner' ? 0.85 : 1)
+  // Player speed is 6, zombies are slower. Tanks are very slow
+  const speed = type === 'runner' ? 3 : (type === 'tank' ? 0.6 : 2)
+  const scale = type === 'tank' ? 1.15 : (type === 'runner' ? 0.85 : 1)
   const maxHealth = type === 'tank' ? 300 : (type === 'runner' ? 50 : 100)
 
   useEffect(() => {
@@ -157,8 +157,9 @@ const Zombie = ({ id, position, health, playerPosition, type }: EnemyType & { pl
     const pos = body.current.translation()
     enemyPositionMap.set(id, [pos.x, pos.y, pos.z])
     
-    // Don't move if dead
-    if (health <= 0) {
+    // Don't move if dead or game is over
+    const isGameOver = useStore.getState().isGameOver
+    if (health <= 0 || isGameOver) {
       const vel = body.current.linvel()
       body.current.setLinvel({ x: 0, y: vel.y, z: 0 }, true)
       return
@@ -175,14 +176,23 @@ const Zombie = ({ id, position, health, playerPosition, type }: EnemyType & { pl
     // Distance culling: Don't update enemies far away
     if (distToPlayer > 100) return
     
-    if (distToPlayer <= 2) {
+    // Attack radius of 1.5 units - deal damage when in range
+    if (distToPlayer <= 1.5) {
         setAnimState('attack')
         const vel = body.current.linvel()
         body.current.setLinvel({ x: 0, y: vel.y, z: 0 }, true)
+        
+        // Deal damage periodically when in attack range (every ~1 second)
+        if (frameCounterRef.current % 60 === 0) {
+            useStore.getState().decreaseHealth(10)
+        }
     } else {
         setAnimState('walk')
         const direction = new THREE.Vector3()
-        direction.subVectors(playerPosition, enemyPos).normalize().multiplyScalar(speed)
+        // Slow-mo power-up reduces enemy speed to 25%
+        const hasSlowMo = useStore.getState().hasPowerUp('slowmo')
+        const effectiveSpeed = hasSlowMo ? speed * 0.25 : speed
+        direction.subVectors(playerPosition, enemyPos).normalize().multiplyScalar(effectiveSpeed)
         const vel = body.current.linvel()
         body.current.setLinvel({ x: direction.x, y: vel.y, z: direction.z }, true)
     }
@@ -231,6 +241,9 @@ export const Enemies = () => {
 
   // Optimize spawn logic - only check every few frames
   useFrame((_, delta) => {
+      // Don't spawn if game is over
+      if (useStore.getState().isGameOver) return
+      
       updateCounterRef.current++
       // Only update spawn logic every 10 frames (roughly 6 times per second at 60fps)
       if (updateCounterRef.current % 10 === 0) {
@@ -240,7 +253,7 @@ export const Enemies = () => {
           const baseInterval = 3.0
           const speedBonus = Math.min(score / 1000, 1.8)
           const spawnInterval = Math.max(1.2, baseInterval - speedBonus)
-          const maxEnemies = Math.min(25, 10 + Math.floor(score / 500))
+          const maxEnemies = Math.min(20, 10 + Math.floor(score / 500))
           
           spawnTimerRef.current += delta * 10 // Multiply by 10 since we're checking less frequently
           if (spawnTimerRef.current >= spawnInterval && enemyCount < maxEnemies) {

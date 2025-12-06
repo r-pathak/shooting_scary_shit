@@ -10,6 +10,7 @@ import { UI } from './game/UI'
 import { AssetLoader } from './game/AssetLoader'
 import { ZombieModelProvider } from './game/ZombieModelLoader'
 import { Stars } from './game/Stars'
+import { PowerUps } from './game/PowerUps'
 import { useStore } from './game/store'
 
 // Powerful flashlight that follows camera
@@ -65,7 +66,35 @@ function LoadingScreen() {
       fontFamily: 'monospace',
       zIndex: 1000
     }}>
-      <h1 style={{ fontSize: '48px', marginBottom: '20px' }}>🧟 LOADING...</h1>
+      {/* Game Title */}
+      <h1 style={{ 
+        fontSize: '56px', 
+        marginBottom: '10px',
+        color: '#FFD700',
+        textShadow: '0 0 20px #FFD700, 0 0 40px #FF6600',
+        letterSpacing: '4px'
+      }}>
+        SHOOTING SCARY BASTARDS
+      </h1>
+      <a 
+        href="https://www.linkedin.com/in/rohan--pathak/?skipRedirect=true"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ 
+          fontSize: '20px', 
+          marginBottom: '40px',
+          color: '#aaa',
+          fontStyle: 'italic',
+          textDecoration: 'none',
+          cursor: 'pointer',
+          transition: 'color 0.2s'
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.color = '#FFD700'}
+        onMouseLeave={(e) => e.currentTarget.style.color = '#aaa'}
+      >
+        by rohan pathak
+      </a>
+      
       <div style={{
         width: '400px',
         height: '30px',
@@ -88,7 +117,7 @@ function LoadingScreen() {
           {loadingProgress > 10 && `${Math.round(loadingProgress)}%`}
         </div>
       </div>
-      <p style={{ marginTop: '20px', fontSize: '18px', color: '#aaa' }}>
+      <p style={{ marginTop: '20px', fontSize: '18px', color: '#666' }}>
         Loading assets...
       </p>
     </div>
@@ -97,6 +126,7 @@ function LoadingScreen() {
 
 function App() {
   const isLoading = useStore(state => state.isLoading)
+  const isGameOver = useStore(state => state.isGameOver)
   
   return (
     <>
@@ -111,6 +141,7 @@ function App() {
           stencil: false,
           depth: true
         }}
+        frameloop={isGameOver ? 'demand' : 'always'}
       >
         <AssetLoader />
         
@@ -118,15 +149,15 @@ function App() {
         <color attach="background" args={['#000011']} />
         
         {/* Stars in the sky */}
-        {!isLoading && <Stars />}
+        {!isLoading && !isGameOver && <Stars />}
         
         {/* Night time lighting - slightly brighter ambient */}
         <ambientLight intensity={0.2} />
         
         {/* Flashlight attached to camera */}
-        {!isLoading && <Flashlight />}
+        {!isLoading && !isGameOver && <Flashlight />}
         
-        {!isLoading && (
+        {!isLoading && !isGameOver && (
           <Suspense fallback={null}>
             <ZombieModelProvider>
               <Physics 
@@ -136,12 +167,13 @@ function App() {
                 <Player />
                 <World />
                 <Enemies />
+                <PowerUps />
               </Physics>
             </ZombieModelProvider>
           </Suspense>
         )}
         
-        {!isLoading && <PointerLockControls />}
+        {!isLoading && !isGameOver && <PointerLockControls />}
       </Canvas>
       {!isLoading && <UI />}
     </>

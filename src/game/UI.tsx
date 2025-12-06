@@ -1,6 +1,15 @@
 import { useStore, WEAPONS } from './store'
-import type { WeaponType } from './store'
+import type { WeaponType, PowerUpType } from './store'
 import { useEffect, useState } from 'react'
+
+// Power-up display info
+const POWERUP_INFO: Record<PowerUpType, { emoji: string, name: string, color: string }> = {
+  raygun: { emoji: '🔫', name: 'RAY GUN', color: '#9932CC' },
+  shield: { emoji: '🛡️', name: 'SHIELD', color: '#00BFFF' },
+  speed: { emoji: '🏃', name: 'SPEED', color: '#32CD32' },
+  slowmo: { emoji: '⏱️', name: 'SLOW-MO', color: '#FFD700' },
+  noreload: { emoji: '♾️', name: 'NO RELOAD', color: '#FF4500' }
+}
 
 // High scores helper functions
 const getHighScores = (): number[] => {
@@ -22,11 +31,18 @@ const saveHighScore = (score: number): number[] => {
 }
 
 export const UI = () => {
-  const { health, ammo, score, isGameOver, reset, currentWeapon, kills, unlockedWeapons, isReloading } = useStore()
+  const { health, ammo, score, isGameOver, reset, currentWeapon, kills, unlockedWeapons, isReloading, activePowerUps } = useStore()
   const weaponStats = WEAPONS[currentWeapon]
   const currentAmmo = ammo[currentWeapon]
   const currentKills = kills[currentWeapon]
   const [highScores, setHighScores] = useState<number[]>([])
+  const [, forceUpdate] = useState(0)
+  
+  // Force re-render every 100ms to update power-up timers
+  useEffect(() => {
+    const interval = setInterval(() => forceUpdate(n => n + 1), 100)
+    return () => clearInterval(interval)
+  }, [])
   
   // Load high scores on mount and save when game over
   useEffect(() => {
@@ -118,8 +134,26 @@ export const UI = () => {
       )
   }
 
+  // Check if shield is active
+  const hasShield = activePowerUps.some(p => p.type === 'shield' && p.expiresAt > Date.now())
+
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+        {/* Shield Vignette Effect */}
+        {hasShield && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+            boxShadow: 'inset 0 0 150px 30px rgba(0, 191, 255, 0.3)',
+            borderRadius: '0',
+            zIndex: 100
+          }} />
+        )}
+        
         {/* Crosshair */}
         <div style={{ 
             position: 'absolute', top: '50%', left: '50%', 
@@ -152,16 +186,85 @@ export const UI = () => {
             <div>Score: {score}</div>
         </div>
         
+        {/* Active Power-ups */}
+        {activePowerUps.length > 0 && (
+          <div style={{
+            position: 'absolute', top: '20px', left: '20px',
+            display: 'flex', flexDirection: 'column', gap: '8px'
+          }}>
+            {activePowerUps.filter(p => p.expiresAt > Date.now()).map(powerUp => {
+              const info = POWERUP_INFO[powerUp.type]
+              const timeLeft = Math.max(0, Math.ceil((powerUp.expiresAt - Date.now()) / 1000))
+              // Duration: raygun=30s, slowmo=20s, noreload=45s, others=30s
+              const totalTime = powerUp.type === 'raygun' ? 30 : powerUp.type === 'slowmo' ? 20 : powerUp.type === 'noreload' ? 45 : 30
+              const percentLeft = (timeLeft / totalTime) * 100
+              
+              return (
+                <div key={powerUp.type} style={{
+                  background: 'rgba(0,0,0,0.7)',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  border: `2px solid ${info.color}`,
+                  fontFamily: 'monospace',
+                  minWidth: '140px'
+                }}>
+                  <div style={{ 
+                    color: info.color, 
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    marginBottom: '4px'
+                  }}>
+                    {info.emoji} {info.name}
+                  </div>
+                  <div style={{
+                    width: '100%',
+                    height: '6px',
+                    background: '#333',
+                    borderRadius: '3px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: `${percentLeft}%`,
+                      height: '100%',
+                      background: info.color,
+                      transition: 'width 0.1s linear'
+                    }} />
+                  </div>
+                  <div style={{ 
+                    color: '#fff', 
+                    fontSize: '12px',
+                    marginTop: '2px',
+                    textAlign: 'right'
+                  }}>
+                    {timeLeft}s
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        
         {/* Weapon Info */}
         <div style={{
             position: 'absolute', bottom: '20px', right: '20px',
             textAlign: 'right', color: 'white', fontFamily: 'monospace', fontSize: '24px',
             textShadow: '1px 1px 2px black'
         }}>
-            <div style={{ fontSize: '30px', fontWeight: 'bold' }}>{currentWeapon}</div>
-            <div style={{ color: currentAmmo < 5 ? 'red' : 'white' }}>
-                {currentAmmo} / {weaponStats.magSize}
-            </div>
+            {activePowerUps.some(p => p.type === 'raygun' && p.expiresAt > Date.now()) ? (
+              <>
+                <div style={{ fontSize: '30px', fontWeight: 'bold', color: '#9932CC', textShadow: '0 0 10px #FF00FF' }}>
+                  🔫 RAY GUN
+                </div>
+                <div style={{ color: '#FF00FF' }}>∞ / ∞</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: '30px', fontWeight: 'bold' }}>{currentWeapon}</div>
+                <div style={{ color: currentAmmo < 5 ? 'red' : 'white' }}>
+                    {currentAmmo} / {weaponStats.magSize}
+                </div>
+              </>
+            )}
             
             {/* Kill Tracker / Unlock Progress */}
             {nextUnlock && (
@@ -188,7 +291,7 @@ export const UI = () => {
               <span style={{ color: unlockedWeapons.includes('Rifle') ? 'white' : 'gray' }}> [3] Rifle </span>
             </div>
             <div style={{ color: '#aaa' }}>
-              [R] Reload · [SPACE] Jump
+              [WASD] Move · [R] Reload · [SPACE] Jump
             </div>
         </div>
     </div>
