@@ -117,8 +117,11 @@ function LoadingScreen() {
           {loadingProgress > 10 && `${Math.round(loadingProgress)}%`}
         </div>
       </div>
-      <p style={{ marginTop: '20px', fontSize: '18px', color: '#666' }}>
-        Loading assets...
+      <p style={{ marginTop: '20px', fontSize: '16px', color: '#888' }}>
+        Loading zombie models...
+      </p>
+      <p style={{ marginTop: '10px', fontSize: '14px', color: '#555', maxWidth: '400px', textAlign: 'center' }}>
+        ⚠️ First load can take up to a minute
       </p>
     </div>
   )

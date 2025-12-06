@@ -62,7 +62,7 @@ export const AssetLoader = () => {
 
   useEffect(() => {
     let loaded = 0
-    const totalAssets = 5 // grass texture, dirt texture, 4 FBX files
+    const totalAssets = 6 // grass texture, dirt texture, 4 FBX files
     const fbxLoader = new FBXLoader()
     const textureLoader = new THREE.TextureLoader()
 
