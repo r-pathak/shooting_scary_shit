@@ -3,8 +3,15 @@ import { useRef, useEffect, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { RigidBody, RapierRigidBody, CapsuleCollider } from '@react-three/rapier'
 import { Vector3 } from 'three'
-import { useStore, WEAPONS } from './store'
+import { useStore, WEAPONS, burningEnemies } from './store'
 import { enemyPositionMap } from './Enemies'
+
+// Flamethrower constants
+const FLAME_RANGE = 15
+const FLAME_CONE_ANGLE = 0.8 // radians (~32 degrees) - wider spray
+const FLAME_DOT_DAMAGE = 10 // damage per tick
+const FLAME_DOT_TICKS = 8 // number of DOT ticks
+const FLAME_DOT_INTERVAL = 300 // ms between ticks
 
 const BASE_SPEED = 6
 const JUMP_FORCE = 1
@@ -17,8 +24,24 @@ export const Player = () => {
   
   const lastShootRef = useRef(0)
   const [showMuzzleFlash, setShowMuzzleFlash] = useState(false)
+  const [showFlame, setShowFlame] = useState(false)
   const weaponKickRef = useRef(0)
   const weaponBobRef = useRef(0)
+  
+  // Flame particle system
+  const [flameParticles, setFlameParticles] = useState<Array<{
+    id: number
+    x: number
+    y: number
+    z: number
+    vx: number
+    vy: number
+    vz: number
+    life: number
+    size: number
+    color: string
+  }>>([])
+  const particleIdRef = useRef(0)
   
   // Weapon group ref for real-time updates
   const weaponGroupRef = useRef<THREE.Group>(null)
@@ -91,20 +114,56 @@ export const Player = () => {
 
   const attemptShoot = () => {
       if (isReloadingRef.current) return
-      const stats = WEAPONS[useStore.getState().currentWeapon]
-      if (Date.now() - lastShootRef.current < stats.fireRate) return 
       
-      const didShoot = useStore.getState().shootAmmo()
-      if (didShoot) {
-          lastShootRef.current = Date.now()
-          performRaycast()
+      // Check for flamethrower power-up
+      const hasFlamethrower = useStore.getState().hasPowerUp('flamethrower')
+      
+      if (hasFlamethrower) {
+          // Flamethrower: continuous fire, no ammo consumption, faster rate
+          if (Date.now() - lastShootRef.current < 50) return // Very fast fire rate for particles
           
-          // Visual feedback
-          setShowMuzzleFlash(true)
-          weaponKickRef.current = 0.15
-          setTimeout(() => setShowMuzzleFlash(false), 60)
+          lastShootRef.current = Date.now()
+          performFlamethrowerAttack()
+          
+          // Spawn flame particles - wider spray pattern
+          const newParticles: typeof flameParticles = []
+          for (let i = 0; i < 8; i++) {
+            const spread = 0.45 // Much wider spread
+            const speed = 0.6 + Math.random() * 0.5
+            newParticles.push({
+              id: particleIdRef.current++,
+              x: (Math.random() - 0.5) * 0.08,
+              y: (Math.random() - 0.5) * 0.08,
+              z: -0.35,
+              vx: (Math.random() - 0.5) * spread,
+              vy: (Math.random() - 0.5) * spread * 0.6 + 0.03, // More vertical spread too
+              vz: -speed,
+              life: 1.0,
+              size: 0.04 + Math.random() * 0.05,
+              color: ['#FFFF00', '#FFDD00', '#FFAA00', '#FF6600', '#FF3300', '#FF0000'][Math.floor(Math.random() * 6)]
+            })
+          }
+          setFlameParticles(prev => [...prev.slice(-80), ...newParticles]) // Keep max 88 particles
+          
+          // Visual feedback - continuous flame
+          setShowFlame(true)
+          weaponKickRef.current = 0.05
       } else {
-          handleReload()
+          const stats = WEAPONS[useStore.getState().currentWeapon]
+          if (Date.now() - lastShootRef.current < stats.fireRate) return 
+          
+          const didShoot = useStore.getState().shootAmmo()
+          if (didShoot) {
+              lastShootRef.current = Date.now()
+              performRaycast()
+              
+              // Visual feedback
+              setShowMuzzleFlash(true)
+              weaponKickRef.current = 0.15
+              setTimeout(() => setShowMuzzleFlash(false), 60)
+          } else {
+              handleReload()
+          }
       }
   }
 
@@ -186,6 +245,73 @@ export const Player = () => {
       }
   }
 
+  // Flamethrower attack - cone-based damage with DOT
+  const performFlamethrowerAttack = () => {
+      const rayOrigin = camera.position.clone()
+      const rayDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
+      
+      const enemies = useStore.getState().enemies
+      
+      for (const enemy of enemies) {
+          if (enemy.health <= 0) continue
+          
+          const currentPos = enemyPositionMap.get(enemy.id)
+          if (!currentPos) continue
+          
+          const scale = enemy.type === 'tank' ? 1.15 : (enemy.type === 'runner' ? 0.85 : 1)
+          const bodyHeight = 1.0 * scale
+          const enemyPos = new THREE.Vector3(currentPos[0], currentPos[1] + bodyHeight, currentPos[2])
+          
+          const toEnemy = enemyPos.clone().sub(rayOrigin)
+          const distance = toEnemy.length()
+          
+          // Check if within flame range
+          if (distance > FLAME_RANGE) continue
+          
+          // Check if within cone angle
+          toEnemy.normalize()
+          const angle = Math.acos(toEnemy.dot(rayDir))
+          
+          if (angle <= FLAME_CONE_ANGLE) {
+              // Direct flame damage (small amount)
+              useStore.getState().damageEnemy(enemy.id, 5)
+              
+              // Apply/refresh burning DOT
+              burningEnemies.set(enemy.id, {
+                  id: enemy.id,
+                  damagePerTick: FLAME_DOT_DAMAGE,
+                  ticksRemaining: FLAME_DOT_TICKS,
+                  lastTickTime: Date.now()
+              })
+          }
+      }
+  }
+
+  // Process burning DOT effects
+  const processBurningEnemies = () => {
+      const now = Date.now()
+      
+      for (const [enemyId, burning] of burningEnemies.entries()) {
+          // Check if enemy still exists and is alive
+          const enemy = useStore.getState().enemies.find(e => e.id === enemyId)
+          if (!enemy || enemy.health <= 0) {
+              burningEnemies.delete(enemyId)
+              continue
+          }
+          
+          // Check if it's time for next tick
+          if (now - burning.lastTickTime >= FLAME_DOT_INTERVAL) {
+              useStore.getState().damageEnemy(enemyId, burning.damagePerTick)
+              burning.ticksRemaining--
+              burning.lastTickTime = now
+              
+              if (burning.ticksRemaining <= 0) {
+                  burningEnemies.delete(enemyId)
+              }
+          }
+      }
+  }
+
   // Main game loop
   useFrame((_state, delta) => {
       // Stop everything if game is over
@@ -197,9 +323,40 @@ export const Player = () => {
           return
       }
       
+      // Don't allow actions until game has started
+      if (!useStore.getState().gameStarted) {
+          if (body.current) {
+              const vel = body.current.linvel()
+              body.current.setLinvel({ x: 0, y: vel.y, z: 0 }, true)
+          }
+          return
+      }
+      
+      // Process burning enemies DOT
+      processBurningEnemies()
+      
       // Handle shooting
       if (isMouseDown.current) {
           attemptShoot()
+      } else {
+          // Stop flame effect when not shooting
+          setShowFlame(false)
+      }
+      
+      // Update flame particles
+      if (flameParticles.length > 0) {
+        setFlameParticles(prev => prev
+          .map(p => ({
+            ...p,
+            x: p.x + p.vx * delta * 60,
+            y: p.y + p.vy * delta * 60,
+            z: p.z + p.vz * delta * 60,
+            vy: p.vy + 0.002, // slight upward drift
+            life: p.life - delta * 2.5,
+            size: p.size * (1 + delta * 2) // grow as they travel
+          }))
+          .filter(p => p.life > 0)
+        )
       }
       
       // Weapon kick recovery
@@ -269,6 +426,7 @@ export const Player = () => {
   const currentWeapon = useStore(state => state.currentWeapon)
   const activePowerUps = useStore(state => state.activePowerUps)
   const hasRaygun = activePowerUps.some(p => p.type === 'raygun' && p.expiresAt > Date.now())
+  const hasFlamethrower = activePowerUps.some(p => p.type === 'flamethrower' && p.expiresAt > Date.now())
 
   return (
     <>
@@ -291,8 +449,71 @@ export const Player = () => {
         
         {/* FPS Weapon - updated every frame in useFrame */}
         <group ref={weaponGroupRef}>
-            {/* Ray Gun - shown when raygun power-up is active */}
-            {hasRaygun && (
+            {/* Flamethrower - shown when flamethrower power-up is active */}
+            {hasFlamethrower && (
+                <group scale={1.6}>
+                    {/* Main tank body */}
+                    <mesh position={[0, -0.02, 0.05]}>
+                        <cylinderGeometry args={[0.04, 0.04, 0.2, 16]} />
+                        <meshStandardMaterial color="#444" metalness={0.7} roughness={0.3} />
+                    </mesh>
+                    {/* Fuel tank (orange) */}
+                    <mesh position={[0.06, -0.04, 0.08]}>
+                        <cylinderGeometry args={[0.025, 0.025, 0.15, 12]} />
+                        <meshStandardMaterial color="#FF6600" metalness={0.5} roughness={0.4} />
+                    </mesh>
+                    {/* Nozzle */}
+                    <mesh position={[0, 0.01, -0.18]} rotation={[Math.PI / 2, 0, 0]}>
+                        <cylinderGeometry args={[0.015, 0.025, 0.16, 12]} />
+                        <meshStandardMaterial color="#222" metalness={0.9} roughness={0.1} />
+                    </mesh>
+                    {/* Pilot light */}
+                    <mesh position={[0, 0.01, -0.28]}>
+                        <sphereGeometry args={[0.012, 8, 8]} />
+                        <meshStandardMaterial color="#FF4400" emissive="#FF4400" emissiveIntensity={2} />
+                    </mesh>
+                    {/* Grip */}
+                    <mesh position={[0, -0.1, 0.02]}>
+                        <boxGeometry args={[0.03, 0.08, 0.04]} />
+                        <meshStandardMaterial color="#333" roughness={0.7} />
+                    </mesh>
+                    {/* Trigger */}
+                    <mesh position={[0, -0.07, -0.04]}>
+                        <boxGeometry args={[0.015, 0.025, 0.02]} />
+                        <meshStandardMaterial color="#1a1a1a" />
+                    </mesh>
+                    {/* Flame particles when firing */}
+                    {flameParticles.map(particle => (
+                        <mesh 
+                            key={particle.id} 
+                            position={[particle.x, particle.y + 0.01, particle.z]}
+                        >
+                            <sphereGeometry args={[particle.size * particle.life, 6, 6]} />
+                            <meshBasicMaterial 
+                                color={particle.color} 
+                                transparent 
+                                opacity={particle.life * 0.9}
+                            />
+                        </mesh>
+                    ))}
+                    {/* Core flame glow at nozzle */}
+                    {showFlame && (
+                        <group position={[0, 0.01, -0.30]}>
+                            <mesh>
+                                <sphereGeometry args={[0.025, 8, 8]} />
+                                <meshBasicMaterial color="#FFFFFF" />
+                            </mesh>
+                            <mesh>
+                                <sphereGeometry args={[0.04, 8, 8]} />
+                                <meshBasicMaterial color="#FFFF00" transparent opacity={0.8} />
+                            </mesh>
+                            <pointLight color="#FF6600" intensity={8} distance={20} />
+                        </group>
+                    )}
+                </group>
+            )}
+            {/* Ray Gun - shown when raygun power-up is active (but not if flamethrower) */}
+            {hasRaygun && !hasFlamethrower && (
                 <group scale={1.8}>
                     {/* Main body - purple futuristic design */}
                     <mesh position={[0, 0, -0.1]}>
@@ -337,7 +558,7 @@ export const Player = () => {
                     )}
                 </group>
             )}
-            {!hasRaygun && currentWeapon === 'Pistol' && (
+            {!hasRaygun && !hasFlamethrower && currentWeapon === 'Pistol' && (
                 <group scale={2}>
                     {/* Slide */}
                     <mesh position={[0, 0.02, -0.08]}>
@@ -368,7 +589,7 @@ export const Player = () => {
                     )}
                 </group>
             )}
-            {!hasRaygun && currentWeapon === 'SMG' && (
+            {!hasRaygun && !hasFlamethrower && currentWeapon === 'SMG' && (
                 <group scale={1.8}>
                     {/* Barrel */}
                     <mesh position={[0, 0, -0.18]}>
@@ -404,7 +625,7 @@ export const Player = () => {
                     )}
                 </group>
             )}
-            {!hasRaygun && currentWeapon === 'Rifle' && (
+            {!hasRaygun && !hasFlamethrower && currentWeapon === 'Rifle' && (
                 <group scale={1.5}>
                     {/* Barrel */}
                     <mesh position={[0, 0, -0.32]}>

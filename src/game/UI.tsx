@@ -8,7 +8,8 @@ const POWERUP_INFO: Record<PowerUpType, { emoji: string, name: string, color: st
   shield: { emoji: '🛡️', name: 'SHIELD', color: '#00BFFF' },
   speed: { emoji: '🏃', name: 'SPEED', color: '#32CD32' },
   slowmo: { emoji: '⏱️', name: 'SLOW-MO', color: '#FFD700' },
-  noreload: { emoji: '♾️', name: 'NO RELOAD', color: '#FF4500' }
+  noreload: { emoji: '♾️', name: 'NO RELOAD', color: '#FF4500' },
+  flamethrower: { emoji: '🔥', name: 'FLAMETHROWER', color: '#FF6600' }
 }
 
 // High scores helper functions
@@ -31,8 +32,9 @@ const saveHighScore = (score: number): number[] => {
 }
 
 export const UI = () => {
-  const { health, ammo, score, isGameOver, reset, currentWeapon, kills, unlockedWeapons, isReloading, activePowerUps, damageFlash } = useStore()
+  const { health, ammo, score, isGameOver, reset, currentWeapon, kills, unlockedWeapons, isReloading, activePowerUps, damageFlash, gameStarted } = useStore()
   const setDamageFlash = useStore(state => state.setDamageFlash)
+  const startGame = useStore(state => state.startGame)
   const weaponStats = WEAPONS[currentWeapon]
   const currentAmmo = ammo[currentWeapon]
   const currentKills = kills[currentWeapon]
@@ -59,6 +61,24 @@ export const UI = () => {
   useEffect(() => {
     setHighScores(getHighScores())
   }, [])
+  
+  // Dismiss controls overlay on first interaction and start the game
+  useEffect(() => {
+    if (gameStarted) return // Already started, don't add listeners
+    
+    const dismissAndStart = () => {
+      startGame()
+    }
+    
+    // Dismiss on any key press or mouse click
+    window.addEventListener('keydown', dismissAndStart)
+    window.addEventListener('mousedown', dismissAndStart)
+    
+    return () => {
+      window.removeEventListener('keydown', dismissAndStart)
+      window.removeEventListener('mousedown', dismissAndStart)
+    }
+  }, [gameStarted, startGame])
   
   useEffect(() => {
     if (isGameOver && score > 0) {
@@ -143,6 +163,31 @@ export const UI = () => {
             >
                 Try Again
             </button>
+            
+            {/* ESC hint */}
+            <div style={{
+              marginTop: '40px',
+              padding: '15px 25px',
+              background: 'rgba(255,255,255,0.15)',
+              borderRadius: '8px',
+              border: '2px solid #ffcc00',
+              animation: 'pulse 2s ease-in-out infinite'
+            }}>
+              <span style={{ 
+                color: '#ffcc00', 
+                fontSize: '18px',
+                fontWeight: 'bold',
+                textShadow: '0 0 10px rgba(255,204,0,0.5)'
+              }}>
+                ⌨️ Press <span style={{ 
+                  background: '#ffcc00', 
+                  color: '#000', 
+                  padding: '2px 8px', 
+                  borderRadius: '4px',
+                  margin: '0 4px'
+                }}>ESC</span> to re-show cursor
+              </span>
+            </div>
         </div>
       )
   }
@@ -152,6 +197,116 @@ export const UI = () => {
 
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+        {/* Initial Controls Overlay */}
+        {!gameStarted && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'rgba(0,0,0,0.85)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 500,
+            pointerEvents: 'auto'
+          }}>
+            <h1 style={{
+              fontFamily: 'monospace',
+              fontSize: '42px',
+              color: '#ff4444',
+              marginBottom: '10px',
+              textShadow: '0 0 20px rgba(255,68,68,0.5)'
+            }}>
+              WELCOME TO SHOOTING SCARY BASTARDS
+            </h1>
+            
+            <p style={{
+              fontFamily: 'monospace',
+              fontSize: '16px',
+              color: '#888',
+              marginBottom: '40px'
+            }}>
+              Survive as long as you can!
+            </p>
+            
+            <div style={{
+              background: 'rgba(255,255,255,0.1)',
+              borderRadius: '15px',
+              padding: '30px 50px',
+              border: '2px solid #444'
+            }}>
+              <h2 style={{
+                fontFamily: 'monospace',
+                fontSize: '24px',
+                color: '#fff',
+                marginBottom: '25px',
+                textAlign: 'center'
+              }}>
+                ⌨️ CONTROLS
+              </h2>
+              
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'auto auto',
+                gap: '15px 40px',
+                fontFamily: 'monospace',
+                fontSize: '18px'
+              }}>
+                <div style={{ color: '#ffcc00' }}>
+                  <span style={{ background: '#333', padding: '4px 12px', borderRadius: '4px', marginRight: '8px' }}>W A S D</span>
+                </div>
+                <div style={{ color: '#fff' }}>Move</div>
+                
+                <div style={{ color: '#ffcc00' }}>
+                  <span style={{ background: '#333', padding: '4px 12px', borderRadius: '4px', marginRight: '8px' }}>MOUSE</span>
+                </div>
+                <div style={{ color: '#fff' }}>Look Around</div>
+                
+                <div style={{ color: '#ffcc00' }}>
+                  <span style={{ background: '#333', padding: '4px 12px', borderRadius: '4px', marginRight: '8px' }}>LEFT CLICK</span>
+                </div>
+                <div style={{ color: '#fff' }}>Shoot</div>
+                
+                <div style={{ color: '#ffcc00' }}>
+                  <span style={{ background: '#333', padding: '4px 12px', borderRadius: '4px', marginRight: '8px' }}>R</span>
+                </div>
+                <div style={{ color: '#fff' }}>Reload</div>
+                
+                <div style={{ color: '#ffcc00' }}>
+                  <span style={{ background: '#333', padding: '4px 12px', borderRadius: '4px', marginRight: '8px' }}>SPACE</span>
+                </div>
+                <div style={{ color: '#fff' }}>Jump</div>
+                
+                <div style={{ color: '#ffcc00' }}>
+                  <span style={{ background: '#333', padding: '4px 12px', borderRadius: '4px', marginRight: '8px' }}>1 2 3</span>
+                </div>
+                <div style={{ color: '#fff' }}>Switch Weapons</div>
+                
+              </div>
+            </div>
+            
+            <div style={{
+              marginTop: '40px',
+              padding: '15px 30px',
+              background: '#ff4444',
+              borderRadius: '8px',
+              animation: 'pulse 1.5s ease-in-out infinite'
+            }}>
+              <span style={{
+                fontFamily: 'monospace',
+                fontSize: '20px',
+                color: '#fff',
+                fontWeight: 'bold'
+              }}>
+                🎮 Click anywhere or press any key to start!
+              </span>
+            </div>
+          </div>
+        )}
+        
         {/* Damage Flash Vignette Effect */}
         {damageFlash && (
           <div style={{
@@ -224,8 +379,8 @@ export const UI = () => {
             {activePowerUps.filter(p => p.expiresAt > Date.now()).map(powerUp => {
               const info = POWERUP_INFO[powerUp.type]
               const timeLeft = Math.max(0, Math.ceil((powerUp.expiresAt - Date.now()) / 1000))
-              // Duration: raygun=30s, slowmo=20s, noreload=45s, others=30s
-              const totalTime = powerUp.type === 'raygun' ? 30 : powerUp.type === 'slowmo' ? 20 : powerUp.type === 'noreload' ? 45 : 30
+              // Duration: raygun=30s, slowmo=20s, noreload=45s, flamethrower=25s, others=30s
+              const totalTime = powerUp.type === 'raygun' ? 30 : powerUp.type === 'slowmo' ? 20 : powerUp.type === 'noreload' ? 45 : powerUp.type === 'flamethrower' ? 25 : 30
               const percentLeft = (timeLeft / totalTime) * 100
               
               return (
@@ -279,7 +434,14 @@ export const UI = () => {
             textAlign: 'right', color: 'white', fontFamily: 'monospace', fontSize: '24px',
             textShadow: '1px 1px 2px black'
         }}>
-            {activePowerUps.some(p => p.type === 'raygun' && p.expiresAt > Date.now()) ? (
+            {activePowerUps.some(p => p.type === 'flamethrower' && p.expiresAt > Date.now()) ? (
+              <>
+                <div style={{ fontSize: '30px', fontWeight: 'bold', color: '#FF6600', textShadow: '0 0 10px #FF3300' }}>
+                  🔥 FLAMETHROWER
+                </div>
+                <div style={{ color: '#FF6600' }}>∞ / ∞</div>
+              </>
+            ) : activePowerUps.some(p => p.type === 'raygun' && p.expiresAt > Date.now()) ? (
               <>
                 <div style={{ fontSize: '30px', fontWeight: 'bold', color: '#9932CC', textShadow: '0 0 10px #FF00FF' }}>
                   🔫 RAY GUN

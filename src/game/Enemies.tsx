@@ -280,19 +280,24 @@ export const Enemies = () => {
 
   // Optimize spawn logic - only check every few frames
   useFrame((_, delta) => {
-      // Don't spawn if game is over
+      // Don't spawn if game is over or not started yet
       if (useStore.getState().isGameOver) return
+      if (!useStore.getState().gameStarted) return
       
       updateCounterRef.current++
       // Only update spawn logic every 10 frames (roughly 6 times per second at 60fps)
       if (updateCounterRef.current % 10 === 0) {
           const score = useStore.getState().score
-          const enemyCount = useStore.getState().enemies.length
+          // Count only living enemies (health > 0)
+          const livingEnemies = useStore.getState().enemies.filter(e => e.health > 0)
+          const enemyCount = livingEnemies.length
           
           const baseInterval = 3.0
           const speedBonus = Math.min(score / 1000, 1.8)
           const spawnInterval = Math.max(1.2, baseInterval - speedBonus)
-          const maxEnemies = Math.min(20, 10 + Math.floor(score / 500))
+          // Hard cap at 20 zombies max
+          const MAX_ZOMBIES = 20
+          const maxEnemies = Math.min(MAX_ZOMBIES, 10 + Math.floor(score / 500))
           
           spawnTimerRef.current += delta * 10 // Multiply by 10 since we're checking less frequently
           if (spawnTimerRef.current >= spawnInterval && enemyCount < maxEnemies) {

@@ -3,7 +3,18 @@ import { v4 as uuidv4 } from 'uuid'
 
 // --- Types ---
 export type WeaponType = 'Pistol' | 'SMG' | 'Rifle'
-export type PowerUpType = 'raygun' | 'shield' | 'speed' | 'slowmo' | 'noreload'
+export type PowerUpType = 'raygun' | 'shield' | 'speed' | 'slowmo' | 'noreload' | 'flamethrower'
+
+// Track burning enemies for flamethrower DOT
+export interface BurningEnemy {
+  id: string
+  damagePerTick: number
+  ticksRemaining: number
+  lastTickTime: number
+}
+
+// Global map for burning enemies (DOT effect)
+export const burningEnemies = new Map<string, BurningEnemy>()
 
 export interface PowerUp {
   id: string
@@ -81,6 +92,7 @@ interface GameState {
   loadingProgress: number
   zombiesReady: boolean
   damageFlash: boolean
+  gameStarted: boolean
   
   currentWeapon: WeaponType
   unlockedWeapons: WeaponType[]
@@ -105,6 +117,7 @@ interface GameState {
   setLoadingProgress: (progress: number) => void
   setZombiesReady: (ready: boolean) => void
   setDamageFlash: (flash: boolean) => void
+  startGame: () => void
   
   setWeapon: (weapon: WeaponType) => void
   shootAmmo: () => boolean
@@ -134,6 +147,7 @@ export const useStore = create<GameState>((set, get) => ({
   loadingProgress: 0,
   zombiesReady: false,
   damageFlash: false,
+  gameStarted: false,
   
   currentWeapon: 'Rifle',
   unlockedWeapons: ['Pistol', 'SMG', 'Rifle'],
@@ -192,6 +206,7 @@ export const useStore = create<GameState>((set, get) => ({
   setLoadingProgress: (progress) => set({ loadingProgress: progress }),
   setZombiesReady: (ready) => set({ zombiesReady: ready }),
   setDamageFlash: (flash: boolean) => set({ damageFlash: flash }),
+  startGame: () => set({ gameStarted: true }),
 
   reset: () => set({ 
     health: 100, 
@@ -201,6 +216,7 @@ export const useStore = create<GameState>((set, get) => ({
     loadingProgress: 100,
     zombiesReady: true, // Keep zombies ready so we don't show loading screen again
     damageFlash: false,
+    gameStarted: true, // Game is already started after reset
     enemies: [],
     currentWeapon: 'Rifle',
     unlockedWeapons: ['Pistol', 'SMG', 'Rifle'],
@@ -255,18 +271,28 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   spawnEnemy: () => {
+    const state = get()
     const r = Math.random()
     let type: Enemy['type'] = 'walker'
     let health = 100
     
-    if (r > 0.8) { type = 'tank'; health = 300 }
-    else if (r > 0.6) { type = 'runner'; health = 50 }
+    // Count current tanks
+    const currentTanks = state.enemies.filter(e => e.type === 'tank' && e.health > 0).length
+    
+    if (r > 0.8 && currentTanks < 4) { 
+      // Only spawn tank if under limit of 4
+      type = 'tank'
+      health = 300 
+    } else if (r > 0.6) { 
+      type = 'runner'
+      health = 50 
+    }
 
     set((state) => ({
       enemies: [...state.enemies, { 
         id: uuidv4(), 
-        // Spawn on ground level (y=0) within bounds: -15 to 15 on X/Z
-        position: [(Math.random() - 0.5) * 30, 1.5, (Math.random() - 0.5) * 30],
+        // Spawn within reduced arena bounds (40x40 instead of 50x50)
+        position: [(Math.random() - 0.5) * 24, 1.5, (Math.random() - 0.5) * 24],
         type,
         health
       }]
@@ -311,14 +337,15 @@ export const useStore = create<GameState>((set, get) => ({
   
   // Power-up actions
   spawnPowerUp: () => {
-    const types: PowerUpType[] = ['raygun', 'shield', 'speed', 'slowmo', 'noreload']
+    const types: PowerUpType[] = ['raygun', 'shield', 'speed', 'slowmo', 'noreload', 'flamethrower']
     const type = types[Math.floor(Math.random() * types.length)]
     
     set((state) => ({
       powerUps: [...state.powerUps, {
         id: uuidv4(),
         type,
-        position: [(Math.random() - 0.5) * 40, 1.5, (Math.random() - 0.5) * 40]
+        // Reduced arena size: 40x40 instead of 50x50
+        position: [(Math.random() - 0.5) * 32, 1.5, (Math.random() - 0.5) * 32]
       }]
     }))
   },
@@ -329,11 +356,12 @@ export const useStore = create<GameState>((set, get) => ({
     
     // Duration in ms
     const durations: Record<PowerUpType, number> = {
-      raygun: 30000,    // 30s
-      shield: 30000,    // 30s
-      speed: 30000,     // 30s
-      slowmo: 20000,    // 20s
-      noreload: 45000   // 45s
+      raygun: 30000,       // 30s
+      shield: 30000,       // 30s
+      speed: 30000,        // 30s
+      slowmo: 20000,       // 20s
+      noreload: 45000,     // 45s
+      flamethrower: 25000  // 25s
     }
     
     // Only one power-up at a time - replace any existing
@@ -367,7 +395,8 @@ export const useStore = create<GameState>((set, get) => ({
       healthPickups: [...state.healthPickups, {
         id: uuidv4(),
         amount,
-        position: [(Math.random() - 0.5) * 40, 1, (Math.random() - 0.5) * 40]
+        // Reduced arena: 40x40
+        position: [(Math.random() - 0.5) * 32, 1, (Math.random() - 0.5) * 32]
       }]
     }))
   },

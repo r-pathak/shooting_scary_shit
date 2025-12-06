@@ -7,11 +7,12 @@ import type { PowerUpType } from './store'
 
 // Colors for each power-up type
 const POWERUP_COLORS: Record<PowerUpType, string> = {
-  raygun: '#9932CC',  // Purple
-  shield: '#00BFFF',  // Blue
-  speed: '#32CD32',   // Green
-  slowmo: '#FFD700',  // Gold
-  noreload: '#FF4500' // Orange-Red
+  raygun: '#9932CC',      // Purple
+  shield: '#00BFFF',      // Blue
+  speed: '#32CD32',       // Green
+  slowmo: '#FFD700',      // Gold
+  noreload: '#FF4500',    // Orange-Red
+  flamethrower: '#FF6600' // Fiery Orange
 }
 
 const POWERUP_EMISSIVE: Record<PowerUpType, string> = {
@@ -19,7 +20,8 @@ const POWERUP_EMISSIVE: Record<PowerUpType, string> = {
   shield: '#0080FF',
   speed: '#228B22',
   slowmo: '#DAA520',
-  noreload: '#CC3700'
+  noreload: '#CC3700',
+  flamethrower: '#FF3300'
 }
 
 // Individual power-up pickup
