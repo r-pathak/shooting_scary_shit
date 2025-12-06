@@ -4,9 +4,15 @@ import { useRef, useEffect, Suspense, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import { Billboard, useAnimations } from '@react-three/drei'
 import { SkeletonUtils } from 'three-stdlib'
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
 import type { Enemy as EnemyType } from './store'
 import { useStore } from './store'
+import { useZombieModel } from './ZombieModelLoader'
+
+// Global map to track enemy rigid bodies by handle
+export const enemyBodyMap = new Map<number, string>()
+
+// Global map to track current enemy positions
+export const enemyPositionMap = new Map<string, [number, number, number]>()
 
 // Health bar component that always faces camera
 const HealthBar = ({ health, maxHealth, yOffset }: { health: number, maxHealth: number, yOffset: number }) => {
@@ -29,111 +35,10 @@ const HealthBar = ({ health, maxHealth, yOffset }: { health: number, maxHealth: 
 
 type AnimState = 'walk' | 'attack' | 'die' | 'idle'
 
-// Zombie model using FBX directly (since FBX has matching skeleton + animations)
+// Zombie model using preloaded shared model
 const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, scale: number }) => {
-    const [model, setModel] = useState<THREE.Group | null>(null)
-    const [animations, setAnimations] = useState<THREE.AnimationClip[]>([])
+    const { model, animations, isLoading } = useZombieModel()
     const groupRef = useRef<THREE.Group>(null)
-    
-    // Load the idle FBX as our base model (it includes mesh + skeleton)
-    useEffect(() => {
-        const loader = new FBXLoader()
-        const clips: THREE.AnimationClip[] = []
-        
-        // Load base model from idle animation (includes mesh)
-        loader.load('/zombie_idle.fbx', (fbx) => {
-            fbx.scale.setScalar(0.01) // FBX is in cm, convert to meters
-            setModel(fbx)
-            
-            if (fbx.animations.length > 0) {
-                const clip = fbx.animations[0].clone()
-                clip.name = 'idle'
-                clips.push(clip)
-            }
-            
-            // Load other animations
-            loader.load('/zombie_attack.fbx', (attackFbx) => {
-                if (attackFbx.animations.length > 0) {
-                    const clip = attackFbx.animations[0].clone()
-                    clip.name = 'attack'
-                    clips.push(clip)
-                }
-                
-                loader.load('/zombie_die.fbx', (dieFbx) => {
-                    if (dieFbx.animations.length > 0) {
-                        const clip = dieFbx.animations[0].clone()
-                        clip.name = 'die'
-                        clips.push(clip)
-                    }
-                    
-                    // Load walk animation
-                    loader.load('/zombie_walk.fbx', (walkFbx) => {
-                        if (walkFbx.animations.length > 0) {
-                            const clip = walkFbx.animations[0].clone()
-                            clip.name = 'walk'
-                            clips.push(clip)
-                        }
-                        setAnimations([...clips])
-                    }, undefined, (error) => {
-                        console.warn('Failed to load walk animation:', error)
-                        // If walk animation doesn't exist, use idle as fallback
-                        const walkClip = clips.find(c => c.name === 'idle')?.clone()
-                        if (walkClip) {
-                            walkClip.name = 'walk'
-                            clips.push(walkClip)
-                        }
-                        setAnimations([...clips])
-                    })
-                }, undefined, (error) => {
-                    console.warn('Failed to load die animation:', error)
-                    // Continue without die animation
-                    loader.load('/zombie_walk.fbx', (walkFbx) => {
-                        if (walkFbx.animations.length > 0) {
-                            const clip = walkFbx.animations[0].clone()
-                            clip.name = 'walk'
-                            clips.push(clip)
-                        }
-                        setAnimations([...clips])
-                    }, undefined, (error) => {
-                        console.warn('Failed to load walk animation:', error)
-                        setAnimations([...clips])
-                    })
-                })
-            }, undefined, (error) => {
-                console.warn('Failed to load attack animation:', error)
-                // Continue without attack animation
-                loader.load('/zombie_die.fbx', (dieFbx) => {
-                    if (dieFbx.animations.length > 0) {
-                        const clip = dieFbx.animations[0].clone()
-                        clip.name = 'die'
-                        clips.push(clip)
-                    }
-                    loader.load('/zombie_walk.fbx', (walkFbx) => {
-                        if (walkFbx.animations.length > 0) {
-                            const clip = walkFbx.animations[0].clone()
-                            clip.name = 'walk'
-                            clips.push(clip)
-                        }
-                        setAnimations([...clips])
-                    }, undefined, (error) => {
-                        console.warn('Failed to load walk animation:', error)
-                        setAnimations([...clips])
-                    })
-                }, undefined, (error) => {
-                    console.warn('Failed to load die animation:', error)
-                    setAnimations([...clips])
-                })
-            })
-        }, (progress) => {
-            console.log('Loading zombie_idle.fbx:', progress)
-        }, (error: unknown) => {
-            console.error('Failed to load zombie model:', error)
-            if (error instanceof Error) {
-                console.error('Error details:', error.message)
-            }
-            // Model will fall back to GeometricZombie
-        })
-    }, [])
     
     // Clone for each instance
     const clone = useMemo(() => {
@@ -168,8 +73,7 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
         }
     }, [animState, actions, clone])
     
-    if (!clone) {
-        console.warn('Zombie model not loaded, using fallback. Model state:', model ? 'loaded' : 'null')
+    if (!clone || isLoading) {
         return <GeometricZombie color="#3a5a37" />
     }
     
@@ -207,27 +111,63 @@ const Zombie = ({ id, position, health, playerPosition, type }: EnemyType & { pl
   const group = useRef<THREE.Group>(null)
   const [animState, setAnimState] = useState<AnimState>('walk')
   
-  const speed = type === 'runner' ? 4 : (type === 'tank' ? 1.5 : 2.5)
+  // Player speed is 5, zombies max 60% = 3. Bigger = slower
+  const speed = type === 'runner' ? 3 : (type === 'tank' ? 1 : 2)
   const scale = type === 'tank' ? 1.4 : (type === 'runner' ? 0.85 : 1)
   const maxHealth = type === 'tank' ? 300 : (type === 'runner' ? 50 : 100)
 
   useEffect(() => {
-    if (body.current) {
+    // Small delay to ensure physics body is initialized
+    const timer = setTimeout(() => {
+      if (body.current) {
+        // Register this enemy's handle in the global map
+        // @ts-ignore - accessing raw rapier handle
+        const handle = body.current.handle
+        enemyBodyMap.set(handle, id)
+      }
+    }, 100)
+    return () => {
+      clearTimeout(timer)
+      if (body.current) {
         // @ts-ignore
-        body.current.userData = { type: 'enemy', id: id }
+        enemyBodyMap.delete(body.current.handle)
+      }
+      enemyPositionMap.delete(id)
     }
   }, [id])
 
   const frameCounterRef = useRef(0)
   
+  // Check if health is 0 or below and play die animation
+  useEffect(() => {
+    if (health <= 0) {
+      setAnimState('die')
+      // Remove from maps so they can't be hit again
+      if (body.current) {
+        enemyBodyMap.delete(body.current.handle)
+      }
+      enemyPositionMap.delete(id)
+    }
+  }, [health, id])
+  
   useFrame(() => {
     if (!body.current) return
+    
+    // Always update position in the global map for hit detection
+    const pos = body.current.translation()
+    enemyPositionMap.set(id, [pos.x, pos.y, pos.z])
+    
+    // Don't move if dead
+    if (health <= 0) {
+      const vel = body.current.linvel()
+      body.current.setLinvel({ x: 0, y: vel.y, z: 0 }, true)
+      return
+    }
     
     // Optimize: Only update every 2 frames (30fps instead of 60fps for AI)
     frameCounterRef.current++
     if (frameCounterRef.current % 2 !== 0) return
     
-    const pos = body.current.translation()
     const enemyPos = new THREE.Vector3(pos.x, pos.y, pos.z)
     
     const distToPlayer = enemyPos.distanceTo(playerPosition)
@@ -297,9 +237,9 @@ export const Enemies = () => {
           const score = useStore.getState().score
           const enemyCount = useStore.getState().enemies.length
           
-          const baseInterval = 2.5
-          const speedBonus = Math.min(score / 1000, 1.5)
-          const spawnInterval = Math.max(1.0, baseInterval - speedBonus)
+          const baseInterval = 3.0
+          const speedBonus = Math.min(score / 1000, 1.8)
+          const spawnInterval = Math.max(1.2, baseInterval - speedBonus)
           const maxEnemies = Math.min(25, 10 + Math.floor(score / 500))
           
           spawnTimerRef.current += delta * 10 // Multiply by 10 since we're checking less frequently

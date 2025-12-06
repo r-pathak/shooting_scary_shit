@@ -1,9 +1,10 @@
 import * as THREE from 'three'
 import { useRef, useEffect, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { RigidBody, RapierRigidBody, CapsuleCollider, useRapier } from '@react-three/rapier'
+import { RigidBody, RapierRigidBody, CapsuleCollider } from '@react-three/rapier'
 import { Vector3 } from 'three'
 import { useStore, WEAPONS } from './store'
+import { enemyPositionMap } from './Enemies'
 
 const SPEED = 5
 const JUMP_FORCE = 1
@@ -17,8 +18,6 @@ export const Player = () => {
   const [showMuzzleFlash, setShowMuzzleFlash] = useState(false)
   const weaponKickRef = useRef(0)
   const weaponBobRef = useRef(0)
-  
-  const { world, rapier } = useRapier()
   
   // Weapon group ref for real-time updates
   const weaponGroupRef = useRef<THREE.Group>(null)
@@ -36,7 +35,10 @@ export const Player = () => {
         case 'KeyS': moveConfig.current.backward = true; break;
         case 'KeyA': moveConfig.current.left = true; break;
         case 'KeyD': moveConfig.current.right = true; break;
-        case 'Space': moveConfig.current.jump = true; break;
+        case 'Space': 
+          e.preventDefault()
+          moveConfig.current.jump = true
+          break;
         case 'Digit1': useStore.getState().setWeapon('Pistol'); break;
         case 'Digit2': useStore.getState().setWeapon('SMG'); break;
         case 'Digit3': useStore.getState().setWeapon('Rifle'); break;
@@ -49,6 +51,7 @@ export const Player = () => {
         case 'KeyS': moveConfig.current.backward = false; break;
         case 'KeyA': moveConfig.current.left = false; break;
         case 'KeyD': moveConfig.current.right = false; break;
+        case 'Space': moveConfig.current.jump = false; break;
       }
     }
 
@@ -108,35 +111,65 @@ export const Player = () => {
       const stats = WEAPONS[useStore.getState().currentWeapon]
       const rayOrigin = camera.position.clone()
       const rayDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
-      const ray = new rapier.Ray(rayOrigin, rayDir)
-      const hit = world.castRay(ray, 100, true)
       
-      if (hit && hit.collider) {
-          const rigidBody = hit.collider.parent()
-          if (rigidBody) {
-              // @ts-ignore
-              const userData = rigidBody.userData as { type?: string, id?: string }
-              if (userData && userData.type === 'enemy' && userData.id) {
-                  // Calculate hit point for headshot detection
-                  // @ts-ignore
-                  const hitDistance = hit.toi
-                  const hitPoint = rayOrigin.clone().add(rayDir.clone().multiplyScalar(hitDistance))
+      // Get all enemies and check if ray hits any of them
+      const enemies = useStore.getState().enemies
+      let closestHit: { id: string, distance: number, isHeadshot: boolean } | null = null
+      
+      for (const enemy of enemies) {
+          if (enemy.health <= 0) continue // Skip dead enemies
+          
+          // Get current position from the position map
+          const currentPos = enemyPositionMap.get(enemy.id)
+          if (!currentPos) continue
+          
+          // Enemy position is at their feet, offset to body center based on type
+          const scale = enemy.type === 'tank' ? 1.4 : (enemy.type === 'runner' ? 0.85 : 1)
+          const bodyHeight = 1.0 * scale // Center of body
+          const enemyPos = new THREE.Vector3(currentPos[0], currentPos[1] + bodyHeight, currentPos[2])
+          
+          // Vector from ray origin to enemy
+          const toEnemy = enemyPos.clone().sub(rayOrigin)
+          
+          // Project enemy position onto ray direction
+          const projectionLength = toEnemy.dot(rayDir)
+          
+          // Skip if enemy is behind us
+          if (projectionLength < 0) continue
+          
+          // Find closest point on ray to enemy
+          const closestPoint = rayOrigin.clone().add(rayDir.clone().multiplyScalar(projectionLength))
+          
+          // Distance from ray to enemy center
+          const distanceToRay = closestPoint.distanceTo(enemyPos)
+          
+          // Hit radius based on enemy type - tanks are 1.4x scale so bigger hitbox
+          const hitRadius = enemy.type === 'tank' ? 1.5 : (enemy.type === 'runner' ? 0.5 : 0.7)
+          
+          // Check if ray passes close enough to enemy
+          if (distanceToRay < hitRadius && projectionLength < 100) {
+              // Check if this is the closest hit
+              if (!closestHit || projectionLength < closestHit.distance) {
+                  // Check for headshot (hit point is above enemy center)
+                  const hitHeight = closestPoint.y - enemyPos.y
+                  const isHeadshot = hitHeight > 0.5
                   
-                  // Get enemy position
-                  const enemyPos = rigidBody.translation()
-                  const hitHeight = hitPoint.y - enemyPos.y
-                  
-                  // Headshot if hit is above 1.2 units from enemy base
-                  const isHeadshot = hitHeight > 1.2
-                  const damage = isHeadshot ? stats.damage * 2.5 : stats.damage
-                  
-                  useStore.getState().damageEnemy(userData.id, damage)
-                  
-                  // Visual feedback for headshot
-                  if (isHeadshot) {
-                      console.log('HEADSHOT!')
+                  closestHit = {
+                      id: enemy.id,
+                      distance: projectionLength,
+                      isHeadshot
                   }
               }
+          }
+      }
+      
+      // Apply damage to closest hit enemy
+      if (closestHit) {
+          const damage = closestHit.isHeadshot ? stats.damage * 2.5 : stats.damage
+          useStore.getState().damageEnemy(closestHit.id, damage)
+          
+          if (closestHit.isHeadshot) {
+              console.log('HEADSHOT!')
           }
       }
   }
@@ -203,12 +236,9 @@ export const Player = () => {
       
       // Only allow jump when grounded
       if (jump && isGroundedRef.current) {
-         body.current.applyImpulse({ x: 0, y: JUMP_FORCE, z: 0 }, true)
-         moveConfig.current.jump = false
+         body.current.applyImpulse({ x: 0, y: JUMP_FORCE * 5, z: 0 }, true)
          isGroundedRef.current = false
          groundCheckTimer.current = 0
-      } else {
-         moveConfig.current.jump = false
       }
   })
 
@@ -221,7 +251,7 @@ export const Player = () => {
             colliders={false} 
             mass={1} 
             type="dynamic" 
-            position={[0, 2, 0]} 
+            position={[0, 1.4, 0]} 
             enabledRotations={[false, false, false]}
             onCollisionEnter={({ other }) => {
                 // @ts-ignore
@@ -230,7 +260,7 @@ export const Player = () => {
                 }
             }}
         >
-          <CapsuleCollider args={[0.4, 0.2]} />
+          <CapsuleCollider args={[0.4, 0.5]} position={[0, 0.5, 0]} />
         </RigidBody>
         
         {/* FPS Weapon - updated every frame in useFrame */}

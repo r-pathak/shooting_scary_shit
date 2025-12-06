@@ -18,7 +18,7 @@ export interface WeaponStats {
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
   Pistol: {
     name: 'Pistol',
-    damage: 25,
+    damage: 15,
     fireRate: 400,
     magSize: 12,
     reloadTime: 1000,
@@ -28,7 +28,7 @@ export const WEAPONS: Record<WeaponType, WeaponStats> = {
   },
   SMG: {
     name: 'SMG',
-    damage: 15,
+    damage: 8,
     fireRate: 100,
     magSize: 30,
     reloadTime: 1500,
@@ -38,7 +38,7 @@ export const WEAPONS: Record<WeaponType, WeaponStats> = {
   },
   Rifle: {
     name: 'Rifle',
-    damage: 40,
+    damage: 20,
     fireRate: 150,
     magSize: 30,
     reloadTime: 2000,
@@ -181,8 +181,8 @@ export const useStore = create<GameState>((set, get) => ({
     set((state) => ({
       enemies: [...state.enemies, { 
         id: uuidv4(), 
-        // Spawn on ground level (y=0) within bounds: -10 to 10 on X/Z
-        position: [(Math.random() - 0.5) * 60, 1.5, (Math.random() - 0.5) * 60],
+        // Spawn on ground level (y=0) within bounds: -15 to 15 on X/Z
+        position: [(Math.random() - 0.5) * 30, 1.5, (Math.random() - 0.5) * 30],
         type,
         health
       }]
@@ -190,15 +190,26 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   damageEnemy: (id, amount) => set((state) => {
+    // Find if this enemy will die from this damage
+    const targetEnemy = state.enemies.find(e => e.id === id)
+    const willDie = targetEnemy && (targetEnemy.health - amount) <= 0
+    
+    // Update enemy health (keep them even if dead so they can play die animation)
     const updatedEnemies = state.enemies.map(e => 
       e.id === id ? { ...e, health: e.health - amount } : e
-    ).filter(e => e.health > 0)
+    )
     
-    if (updatedEnemies.length < state.enemies.length) {
+    if (willDie) {
        const currentKills = state.kills[state.currentWeapon] + 1
        const newKills = { ...state.kills, [state.currentWeapon]: currentKills }
-       
        const newUnlocked = [...state.unlockedWeapons]
+
+       // Remove the dead enemy after a delay (for die animation)
+       setTimeout(() => {
+         useStore.setState((s) => ({
+           enemies: s.enemies.filter(e => e.id !== id)
+         }))
+       }, 2000) // 2 seconds for die animation
 
        return { 
            enemies: updatedEnemies, 

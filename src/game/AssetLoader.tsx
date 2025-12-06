@@ -1,9 +1,59 @@
 import { useEffect } from 'react'
 import { useStore } from './store'
-import { useTexture, useGLTF } from '@react-three/drei'
+import { useTexture } from '@react-three/drei'
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as THREE from 'three'
+
+// Helper function to load with timeout
+const loadWithTimeout = <T,>(
+  loader: any,
+  url: string,
+  onProgress?: (progress: ProgressEvent) => void,
+  timeout: number = 30000
+): Promise<T> => {
+  return new Promise((resolve, reject) => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let completed = false
+
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+    }
+
+    const onSuccess = (result: T) => {
+      if (!completed) {
+        completed = true
+        cleanup()
+        resolve(result)
+      }
+    }
+
+    const onError = (error: ErrorEvent | Error) => {
+      if (!completed) {
+        completed = true
+        cleanup()
+        reject(error instanceof Error ? error : new Error(error.message || 'Unknown error'))
+      }
+    }
+
+    timeoutId = setTimeout(() => {
+      if (!completed) {
+        completed = true
+        cleanup()
+        reject(new Error(`Timeout loading ${url} after ${timeout}ms`))
+      }
+    }, timeout)
+
+    loader.load(
+      url,
+      onSuccess,
+      onProgress,
+      onError
+    )
+  })
+}
 
 // Preload all assets
 export const AssetLoader = () => {
@@ -12,15 +62,17 @@ export const AssetLoader = () => {
 
   useEffect(() => {
     let loaded = 0
-    const totalAssets = 7 // grass texture, tree model, zombie model, 4 FBX files
-    const loader = new FBXLoader()
+    const totalAssets = 5 // grass texture, dirt texture, 4 FBX files
+    const fbxLoader = new FBXLoader()
+    const textureLoader = new THREE.TextureLoader()
 
-    const updateProgress = (assetName?: string) => {
+    const updateProgress = (assetName?: string, isError: boolean = false) => {
       loaded++
       const progress = Math.min(100, (loaded / totalAssets) * 100)
       setLoadingProgress(progress)
       if (assetName) {
-        console.log(`Loaded: ${assetName} (${progress.toFixed(0)}%)`)
+        const status = isError ? ' (error)' : ''
+        console.log(`Loaded: ${assetName}${status} (${progress.toFixed(0)}%)`)
       }
       
       if (loaded >= totalAssets) {
@@ -33,45 +85,63 @@ export const AssetLoader = () => {
 
     // Preload textures and models
     const preloadAssets = async () => {
+      const loadPromises: Promise<any>[] = []
+
+      // Load textures
+      loadPromises.push(
+        loadWithTimeout(textureLoader, '/grass_texture.jpeg')
+          .then(() => updateProgress('grass texture'))
+          .catch(() => updateProgress('grass texture', true))
+      )
+
+      loadPromises.push(
+        loadWithTimeout(textureLoader, '/dirt_texture.jpg')
+          .then(() => updateProgress('dirt texture'))
+          .catch(() => updateProgress('dirt texture', true))
+      )
+
+      // Load FBX files (zombie animations) - these are large, so they may take time
+      loadPromises.push(
+        loadWithTimeout(fbxLoader, '/zombie_idle.fbx', undefined, 60000)
+          .then(() => updateProgress('zombie_idle'))
+          .catch((err) => {
+            console.error('Failed to load zombie_idle.fbx:', err)
+            updateProgress('zombie_idle', true)
+          })
+      )
+
+      loadPromises.push(
+        loadWithTimeout(fbxLoader, '/zombie_attack.fbx', undefined, 60000)
+          .then(() => updateProgress('zombie_attack'))
+          .catch((err) => {
+            console.error('Failed to load zombie_attack.fbx:', err)
+            updateProgress('zombie_attack', true)
+          })
+      )
+
+      loadPromises.push(
+        loadWithTimeout(fbxLoader, '/zombie_die.fbx', undefined, 60000)
+          .then(() => updateProgress('zombie_die'))
+          .catch((err) => {
+            console.error('Failed to load zombie_die.fbx:', err)
+            updateProgress('zombie_die', true)
+          })
+      )
+
+      loadPromises.push(
+        loadWithTimeout(fbxLoader, '/zombie_walk.fbx', undefined, 60000)
+          .then(() => updateProgress('zombie_walk'))
+          .catch((err) => {
+            console.error('Failed to load zombie_walk.fbx:', err)
+            updateProgress('zombie_walk', true)
+          })
+      )
+
+      // Wait for all loads to complete (success or failure)
       try {
-        // Load texture
-        const textureLoader = new THREE.TextureLoader()
-        textureLoader.load(
-          '/grass_texture.jpeg', 
-          () => updateProgress('grass texture'),
-          undefined,
-          () => updateProgress('grass texture (error)')
-        )
-
-        // Load GLB models
-        const gltfLoader = new GLTFLoader()
-        gltfLoader.load(
-          '/tree_pine.glb', 
-          () => updateProgress('tree model'),
-          undefined,
-          () => updateProgress('tree model (error)')
-        )
-        gltfLoader.load(
-          '/zombie.glb', 
-          () => updateProgress('zombie model'),
-          undefined,
-          () => updateProgress('zombie model (error)')
-        )
-
-        // Load FBX files (zombie animations) - these are large, so they may take time
-        loader.load('/zombie_idle.fbx', () => updateProgress('zombie_idle'), undefined, () => updateProgress('zombie_idle (error)'))
-        loader.load('/zombie_attack.fbx', () => updateProgress('zombie_attack'), undefined, () => updateProgress('zombie_attack (error)'))
-        loader.load('/zombie_die.fbx', () => updateProgress('zombie_die'), undefined, () => updateProgress('zombie_die (error)'))
-        loader.load('/zombie_walk.fbx', () => updateProgress('zombie_walk'), undefined, () => updateProgress('zombie_walk (error)'))
-
-        // HDR is loaded by Environment component separately, so we don't count it here
-        // It will load in parallel and shouldn't block the game
+        await Promise.allSettled(loadPromises)
       } catch (error) {
         console.error('Error preloading assets:', error)
-        // Continue anyway after a delay
-        setTimeout(() => {
-          setLoading(false)
-        }, 2000)
       }
     }
 
@@ -81,16 +151,10 @@ export const AssetLoader = () => {
   return null
 }
 
-// Hook to preload texture
+// Hook to preload textures
 export const PreloadTexture = () => {
   useTexture('/grass_texture.jpeg')
-  return null
-}
-
-// Hook to preload GLB
-export const PreloadGLB = () => {
-  useGLTF('/tree_pine.glb')
-  useGLTF('/zombie.glb')
+  useTexture('/dirt_texture.jpg')
   return null
 }
 

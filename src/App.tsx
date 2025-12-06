@@ -1,13 +1,50 @@
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
-import { PointerLockControls, Environment } from '@react-three/drei'
-import { Suspense } from 'react'
+import { PointerLockControls } from '@react-three/drei'
+import { Suspense, useRef } from 'react'
+import * as THREE from 'three'
 import { World } from './game/World'
 import { Player } from './game/Player'
 import { Enemies } from './game/Enemies'
 import { UI } from './game/UI'
 import { AssetLoader } from './game/AssetLoader'
+import { ZombieModelProvider } from './game/ZombieModelLoader'
+import { Stars } from './game/Stars'
 import { useStore } from './game/store'
+
+// Powerful flashlight that follows camera
+const Flashlight = () => {
+  const { camera } = useThree()
+  const lightRef = useRef<THREE.SpotLight>(null)
+  
+  useFrame(() => {
+    if (lightRef.current) {
+      // Position light at camera position
+      lightRef.current.position.copy(camera.position)
+      // Point light in camera direction
+      const direction = new THREE.Vector3(0, 0, -1)
+      direction.applyQuaternion(camera.quaternion)
+      lightRef.current.target.position.copy(camera.position).add(direction)
+      lightRef.current.target.updateMatrixWorld()
+    }
+  })
+  
+  return (
+    <spotLight
+      ref={lightRef}
+      intensity={8}
+      angle={1.2}
+      penumbra={0.4}
+      distance={200}
+      decay={1}
+      castShadow
+      shadow-mapSize={[2048, 2048]}
+      shadow-camera-far={200}
+      shadow-bias={-0.0001}
+      color="#fff8e1"
+    />
+  )
+}
 
 function LoadingScreen() {
   const loadingProgress = useStore(state => state.loadingProgress)
@@ -77,36 +114,30 @@ function App() {
       >
         <AssetLoader />
         
-        {/* Skybox */}
-        <Suspense fallback={<color attach="background" args={['#87ceeb']} />}>
-          <Environment files="/skybox.hdr" background />
-        </Suspense>
+        {/* Night time background */}
+        <color attach="background" args={['#000011']} />
         
-        {/* Outdoor lighting - optimized shadow settings */}
-        <ambientLight intensity={0.6} />
-        <directionalLight 
-          position={[10, 20, 10]} 
-          intensity={1.5} 
-          castShadow
-          shadow-mapSize={[1024, 1024]}
-          shadow-camera-far={50}
-          shadow-camera-left={-30}
-          shadow-camera-right={30}
-          shadow-camera-top={30}
-          shadow-camera-bottom={-30}
-          shadow-bias={-0.0001}
-        />
+        {/* Stars in the sky */}
+        {!isLoading && <Stars />}
+        
+        {/* Night time lighting - slightly brighter ambient */}
+        <ambientLight intensity={0.2} />
+        
+        {/* Flashlight attached to camera */}
+        {!isLoading && <Flashlight />}
         
         {!isLoading && (
           <Suspense fallback={null}>
-            <Physics 
-              gravity={[0, -9.81, 0]}
-              timeStep="vary"
-            >
-              <Player />
-              <World />
-              <Enemies />
-            </Physics>
+            <ZombieModelProvider>
+              <Physics 
+                gravity={[0, -9.81, 0]}
+                timeStep="vary"
+              >
+                <Player />
+                <World />
+                <Enemies />
+              </Physics>
+            </ZombieModelProvider>
           </Suspense>
         )}
         
