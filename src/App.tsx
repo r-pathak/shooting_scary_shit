@@ -13,13 +13,7 @@ function App() {
       <Canvas shadows camera={{ fov: 75, near: 0.1, far: 1000 }}>
         {/* Skybox */}
         <Suspense fallback={<color attach="background" args={['#87ceeb']} />}>
-          <Environment 
-            files="/skybox.hdr" 
-            background 
-            onError={(error) => {
-              console.warn('Failed to load skybox:', error)
-            }}
-          />
+          <Environment files="/skybox.hdr" background />
         </Suspense>
         
         {/* Outdoor lighting */}
