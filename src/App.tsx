@@ -53,7 +53,7 @@ function LoadingScreen() {
   const zombiesReady = useStore(state => state.zombiesReady)
   
   // Determine loading stage
-  const stage = isLoading ? 'Loading assets...' : !zombiesReady ? 'Preparing zombie models...' : 'Starting game...'
+  const stage = isLoading ? 'Loading textures...' : !zombiesReady ? 'Loading zombie models (please wait)...' : 'Starting game...'
   
   return (
     <div style={{

@@ -15,6 +15,30 @@ const ZombieModelContext = createContext<ZombieModelData>({
   isLoading: true
 })
 
+// Helper to load FBX - no timeout, just wait
+const loadFBX = (loader: FBXLoader, url: string): Promise<THREE.Group> => {
+  return new Promise((resolve, reject) => {
+    console.log(`Loading ${url}...`)
+    loader.load(
+      url,
+      (fbx) => {
+        console.log(`Loaded ${url}`)
+        resolve(fbx)
+      },
+      (progress) => {
+        if (progress.total > 0) {
+          const pct = Math.round((progress.loaded / progress.total) * 100)
+          console.log(`${url}: ${pct}%`)
+        }
+      },
+      (error) => {
+        console.error(`Failed to load ${url}:`, error)
+        reject(error)
+      }
+    )
+  })
+}
+
 // Preload zombie model and all animations once
 export const ZombieModelProvider = ({ children }: { children: React.ReactNode }) => {
   const [model, setModel] = useState<THREE.Group | null>(null)
@@ -26,102 +50,75 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
     const loader = new FBXLoader()
     const clips: THREE.AnimationClip[] = []
     
-    const finishLoading = () => {
-      setIsLoading(false)
-      setZombiesReady(true)
-      console.log('Zombie models ready!')
-    }
-    
-    // Load base model from idle animation (includes mesh)
-    loader.load('/zombie_idle.fbx', (fbx) => {
-      fbx.scale.setScalar(0.01) // FBX is in cm, convert to meters
-      setModel(fbx)
-      
-      if (fbx.animations.length > 0) {
-        const clip = fbx.animations[0].clone()
-        clip.name = 'idle'
-        clips.push(clip)
-      }
-      
-      // Load other animations
-      loader.load('/zombie_attack.fbx', (attackFbx) => {
-        if (attackFbx.animations.length > 0) {
-          const clip = attackFbx.animations[0].clone()
-          clip.name = 'attack'
+    const loadAllModels = async () => {
+      try {
+        // Load idle (this has the main model mesh)
+        const idleFbx = await loadFBX(loader, '/zombie_idle.fbx')
+        idleFbx.scale.setScalar(0.01)
+        setModel(idleFbx)
+        
+        if (idleFbx.animations.length > 0) {
+          const clip = idleFbx.animations[0].clone()
+          clip.name = 'idle'
           clips.push(clip)
         }
+
+        // Load attack animation
+        try {
+          const attackFbx = await loadFBX(loader, '/zombie_attack.fbx')
+          if (attackFbx.animations.length > 0) {
+            const clip = attackFbx.animations[0].clone()
+            clip.name = 'attack'
+            clips.push(clip)
+          }
+        } catch (e) {
+          console.warn('Attack animation not available')
+        }
+
+        // Load die animation
+        try {
+          const dieFbx = await loadFBX(loader, '/zombie_die.fbx')
+          if (dieFbx.animations.length > 0) {
+            const clip = dieFbx.animations[0].clone()
+            clip.name = 'die'
+            clips.push(clip)
+          }
+        } catch (e) {
+          console.warn('Die animation not available')
+        }
+
+        // Load walk animation
+        try {
+          const walkFbx = await loadFBX(loader, '/zombie_walk.fbx')
+          if (walkFbx.animations.length > 0) {
+            const clip = walkFbx.animations[0].clone()
+            clip.name = 'walk'
+            clips.push(clip)
+          }
+        } catch (e) {
+          // Fallback - use idle as walk
+          console.warn('Walk animation not available, using idle')
+          const walkClip = clips.find(c => c.name === 'idle')?.clone()
+          if (walkClip) {
+            walkClip.name = 'walk'
+            clips.push(walkClip)
+          }
+        }
+
+        setAnimations([...clips])
+        setIsLoading(false)
+        setZombiesReady(true)
+        console.log('All zombie models loaded!')
         
-        loader.load('/zombie_die.fbx', (dieFbx) => {
-          if (dieFbx.animations.length > 0) {
-            const clip = dieFbx.animations[0].clone()
-            clip.name = 'die'
-            clips.push(clip)
-          }
-          
-          // Load walk animation
-          loader.load('/zombie_walk.fbx', (walkFbx) => {
-            if (walkFbx.animations.length > 0) {
-              const clip = walkFbx.animations[0].clone()
-              clip.name = 'walk'
-              clips.push(clip)
-            }
-            setAnimations([...clips])
-            finishLoading()
-          }, undefined, (error) => {
-            console.warn('Failed to load walk animation:', error)
-            // If walk animation doesn't exist, use idle as fallback
-            const walkClip = clips.find(c => c.name === 'idle')?.clone()
-            if (walkClip) {
-              walkClip.name = 'walk'
-              clips.push(walkClip)
-            }
-            setAnimations([...clips])
-            finishLoading()
-          })
-        }, undefined, (error) => {
-          console.warn('Failed to load die animation:', error)
-          loader.load('/zombie_walk.fbx', (walkFbx) => {
-            if (walkFbx.animations.length > 0) {
-              const clip = walkFbx.animations[0].clone()
-              clip.name = 'walk'
-              clips.push(clip)
-            }
-            setAnimations([...clips])
-            finishLoading()
-          }, undefined, () => {
-            setAnimations([...clips])
-            finishLoading()
-          })
-        })
-      }, undefined, (error) => {
-        console.warn('Failed to load attack animation:', error)
-        loader.load('/zombie_die.fbx', (dieFbx) => {
-          if (dieFbx.animations.length > 0) {
-            const clip = dieFbx.animations[0].clone()
-            clip.name = 'die'
-            clips.push(clip)
-          }
-          loader.load('/zombie_walk.fbx', (walkFbx) => {
-            if (walkFbx.animations.length > 0) {
-              const clip = walkFbx.animations[0].clone()
-              clip.name = 'walk'
-              clips.push(clip)
-            }
-            setAnimations([...clips])
-            finishLoading()
-          }, undefined, () => {
-            setAnimations([...clips])
-            finishLoading()
-          })
-        }, undefined, () => {
-          setAnimations([...clips])
-          finishLoading()
-        })
-      })
-    }, undefined, (error: unknown) => {
-      console.error('Failed to load zombie model:', error)
-      finishLoading()
-    })
+      } catch (error) {
+        console.error('Failed to load zombie models:', error)
+        // Still mark as ready so game can start (will show nothing for zombies)
+        setIsLoading(false)
+        setZombiesReady(true)
+      }
+    }
+
+    loadAllModels()
   }, [setZombiesReady])
 
   return (
@@ -132,4 +129,3 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
 }
 
 export const useZombieModel = () => useContext(ZombieModelContext)
-
