@@ -75,7 +75,7 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
           console.warn('Attack animation not available')
         }
 
-        // Load die animation
+        // Load die animations (two variants for randomization)
         try {
           const dieFbx = await loadFBX(loader, '/zombie_die.fbx')
           if (dieFbx.animations.length > 0) {
@@ -84,7 +84,18 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
             clips.push(clip)
           }
         } catch (e) {
-          console.warn('Die animation not available')
+          console.warn('Die animation 1 not available')
+        }
+
+        try {
+          const die2Fbx = await loadFBX(loader, '/zombie_die_2.fbx')
+          if (die2Fbx.animations.length > 0) {
+            const clip = die2Fbx.animations[0].clone()
+            clip.name = 'die2'
+            clips.push(clip)
+          }
+        } catch (e) {
+          console.warn('Die animation 2 not available')
         }
 
         // Load walk animation

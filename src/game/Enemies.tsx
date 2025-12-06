@@ -48,6 +48,11 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
     
     const { actions } = useAnimations(animations, clone || undefined)
     
+    // Randomly pick a death animation once per zombie (stable across re-renders)
+    const deathAnim = useMemo(() => {
+        return Math.random() < 0.5 ? 'die' : 'die2'
+    }, [])
+    
     // Play animation based on state
     useEffect(() => {
         if (!clone || Object.keys(actions).length === 0) return
@@ -59,8 +64,11 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
             }
         })
         
+        // For death, use the randomly selected animation
+        const animName = animState === 'die' ? deathAnim : animState
+        
         // Play the right animation
-        const action = actions[animState]
+        const action = actions[animName]
         if (action) {
             action.reset().fadeIn(0.2).play()
             
@@ -71,7 +79,7 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
         } else if (actions['idle']) {
             actions['idle']?.reset().fadeIn(0.2).play()
         }
-    }, [animState, actions, clone])
+    }, [animState, actions, clone, deathAnim])
     
     // Don't render anything until the model is ready - no geometric fallbacks
     if (!clone || isLoading) {
