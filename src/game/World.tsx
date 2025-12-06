@@ -5,17 +5,21 @@ import * as THREE from 'three'
 
 // Ground - SOLID FLOOR
 const Ground = () => {
-  const grassTexture = useTexture('/grass_texture.jpeg')
+  const grassTexture = useTexture('/grass_texture.jpeg', undefined, (error) => {
+    console.warn('Failed to load grass texture:', error)
+  })
   
-  grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping
-  grassTexture.repeat.set(20, 20)
+  if (grassTexture) {
+    grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping
+    grassTexture.repeat.set(20, 20)
+  }
   
   return (
     <RigidBody type="fixed" position={[0, -0.5, 0]} colliders={false}>
       <CuboidCollider args={[50, 0.5, 50]} />
       <mesh receiveShadow>
         <boxGeometry args={[100, 1, 100]} />
-        <meshStandardMaterial map={grassTexture} />
+        <meshStandardMaterial map={grassTexture || undefined} color={grassTexture ? undefined : "#4a7c59"} />
       </mesh>
     </RigidBody>
   )
@@ -23,7 +27,9 @@ const Ground = () => {
 
 // Tree wall around perimeter
 const TreeWall = () => {
-  const { scene } = useGLTF('/tree_pine.glb')
+  const { scene } = useGLTF('/tree_pine.glb', undefined, (error) => {
+    console.warn('Failed to load tree model:', error)
+  })
   
   const treePositions = useMemo(() => {
     const positions: [number, number, number][] = []

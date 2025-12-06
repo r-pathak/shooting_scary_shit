@@ -74,7 +74,8 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
                             clips.push(clip)
                         }
                         setAnimations([...clips])
-                    }, undefined, () => {
+                    }, undefined, (error) => {
+                        console.warn('Failed to load walk animation:', error)
                         // If walk animation doesn't exist, use idle as fallback
                         const walkClip = clips.find(c => c.name === 'idle')?.clone()
                         if (walkClip) {
@@ -83,8 +84,49 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
                         }
                         setAnimations([...clips])
                     })
+                }, undefined, (error) => {
+                    console.warn('Failed to load die animation:', error)
+                    // Continue without die animation
+                    loader.load('/zombie_walk.fbx', (walkFbx) => {
+                        if (walkFbx.animations.length > 0) {
+                            const clip = walkFbx.animations[0].clone()
+                            clip.name = 'walk'
+                            clips.push(clip)
+                        }
+                        setAnimations([...clips])
+                    }, undefined, (error) => {
+                        console.warn('Failed to load walk animation:', error)
+                        setAnimations([...clips])
+                    })
+                })
+            }, undefined, (error) => {
+                console.warn('Failed to load attack animation:', error)
+                // Continue without attack animation
+                loader.load('/zombie_die.fbx', (dieFbx) => {
+                    if (dieFbx.animations.length > 0) {
+                        const clip = dieFbx.animations[0].clone()
+                        clip.name = 'die'
+                        clips.push(clip)
+                    }
+                    loader.load('/zombie_walk.fbx', (walkFbx) => {
+                        if (walkFbx.animations.length > 0) {
+                            const clip = walkFbx.animations[0].clone()
+                            clip.name = 'walk'
+                            clips.push(clip)
+                        }
+                        setAnimations([...clips])
+                    }, undefined, (error) => {
+                        console.warn('Failed to load walk animation:', error)
+                        setAnimations([...clips])
+                    })
+                }, undefined, (error) => {
+                    console.warn('Failed to load die animation:', error)
+                    setAnimations([...clips])
                 })
             })
+        }, undefined, (error) => {
+            console.error('Failed to load zombie model:', error)
+            // Model will fall back to GeometricZombie
         })
     }, [])
     
