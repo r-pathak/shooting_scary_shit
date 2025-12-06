@@ -136,9 +136,26 @@ export const UI = () => {
 
   // Check if shield is active
   const hasShield = activePowerUps.some(p => p.type === 'shield' && p.expiresAt > Date.now())
+  const damageFlash = useStore(state => state.damageFlash)
 
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+        {/* Damage Flash Vignette Effect */}
+        {damageFlash && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+            boxShadow: 'inset 0 0 200px 60px rgba(255, 0, 0, 0.5)',
+            background: 'radial-gradient(ellipse at center, transparent 40%, rgba(255, 0, 0, 0.3) 100%)',
+            zIndex: 200,
+            animation: 'damageFlash 150ms ease-out'
+          }} />
+        )}
+        
         {/* Shield Vignette Effect */}
         {hasShield && (
           <div style={{
@@ -259,10 +276,10 @@ export const UI = () => {
               </>
             ) : (
               <>
-                <div style={{ fontSize: '30px', fontWeight: 'bold' }}>{currentWeapon}</div>
-                <div style={{ color: currentAmmo < 5 ? 'red' : 'white' }}>
-                    {currentAmmo} / {weaponStats.magSize}
-                </div>
+            <div style={{ fontSize: '30px', fontWeight: 'bold' }}>{currentWeapon}</div>
+            <div style={{ color: currentAmmo < 5 ? 'red' : 'white' }}>
+                {currentAmmo} / {weaponStats.magSize}
+            </div>
               </>
             )}
             
@@ -287,8 +304,8 @@ export const UI = () => {
         }}>
             <div style={{ marginBottom: '5px' }}>
               [1] Pistol 
-              <span style={{ color: unlockedWeapons.includes('SMG') ? 'white' : 'gray' }}> [2] SMG </span>
-              <span style={{ color: unlockedWeapons.includes('Rifle') ? 'white' : 'gray' }}> [3] Rifle </span>
+            <span style={{ color: unlockedWeapons.includes('SMG') ? 'white' : 'gray' }}> [2] SMG </span>
+            <span style={{ color: unlockedWeapons.includes('Rifle') ? 'white' : 'gray' }}> [3] Rifle </span>
             </div>
             <div style={{ color: '#aaa' }}>
               [WASD] Move · [R] Reload · [SPACE] Jump

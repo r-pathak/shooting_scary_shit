@@ -49,6 +49,11 @@ const Flashlight = () => {
 
 function LoadingScreen() {
   const loadingProgress = useStore(state => state.loadingProgress)
+  const isLoading = useStore(state => state.isLoading)
+  const zombiesReady = useStore(state => state.zombiesReady)
+  
+  // Determine loading stage
+  const stage = isLoading ? 'Loading assets...' : !zombiesReady ? 'Preparing zombie models...' : 'Starting game...'
   
   return (
     <div style={{
@@ -92,7 +97,7 @@ function LoadingScreen() {
         onMouseEnter={(e) => e.currentTarget.style.color = '#FFD700'}
         onMouseLeave={(e) => e.currentTarget.style.color = '#aaa'}
       >
-        by rohan pathak
+        a game by <span style={{ textDecoration: 'underline' }}>Rohan Pathak</span>
       </a>
       
       <div style={{
@@ -118,7 +123,7 @@ function LoadingScreen() {
         </div>
       </div>
       <p style={{ marginTop: '20px', fontSize: '16px', color: '#888' }}>
-        Loading zombie models...
+        {stage}
       </p>
       <p style={{ marginTop: '10px', fontSize: '14px', color: '#555', maxWidth: '400px', textAlign: 'center' }}>
         ⚠️ First load can take up to a minute
@@ -129,11 +134,16 @@ function LoadingScreen() {
 
 function App() {
   const isLoading = useStore(state => state.isLoading)
+  const zombiesReady = useStore(state => state.zombiesReady)
   const isGameOver = useStore(state => state.isGameOver)
+  
+  // Game starts only when assets AND zombies are loaded
+  const gameReady = !isLoading && zombiesReady && !isGameOver
+  const showLoading = isLoading || !zombiesReady
   
   return (
     <>
-      {isLoading && <LoadingScreen />}
+      {showLoading && <LoadingScreen />}
       <Canvas 
         shadows 
         camera={{ fov: 75, near: 0.1, far: 1000 }}
@@ -151,18 +161,19 @@ function App() {
         {/* Night time background */}
         <color attach="background" args={['#000011']} />
         
-        {/* Stars in the sky */}
-        {!isLoading && !isGameOver && <Stars />}
-        
         {/* Night time lighting - slightly brighter ambient */}
         <ambientLight intensity={0.2} />
         
-        {/* Flashlight attached to camera */}
-        {!isLoading && !isGameOver && <Flashlight />}
-        
-        {!isLoading && !isGameOver && (
-          <Suspense fallback={null}>
-            <ZombieModelProvider>
+        {/* ZombieModelProvider loads during loading screen */}
+        <Suspense fallback={null}>
+          <ZombieModelProvider>
+            {/* Stars in the sky */}
+            {gameReady && <Stars />}
+            
+            {/* Flashlight attached to camera */}
+            {gameReady && <Flashlight />}
+            
+            {gameReady && (
               <Physics 
                 gravity={[0, -9.81, 0]}
                 timeStep="vary"
@@ -172,13 +183,13 @@ function App() {
                 <Enemies />
                 <PowerUps />
               </Physics>
-            </ZombieModelProvider>
-          </Suspense>
-        )}
+            )}
+          </ZombieModelProvider>
+        </Suspense>
         
-        {!isLoading && !isGameOver && <PointerLockControls />}
+        {gameReady && <PointerLockControls />}
       </Canvas>
-      {!isLoading && <UI />}
+      {!showLoading && <UI />}
     </>
   )
 }

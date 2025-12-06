@@ -73,8 +73,9 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
         }
     }, [animState, actions, clone])
     
+    // Don't render anything until the model is ready - no geometric fallbacks
     if (!clone || isLoading) {
-        return <GeometricZombie color="#3a5a37" />
+        return null
     }
     
     return (
@@ -83,28 +84,6 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
         </group>
     )
 }
-
-// Fallback geometric zombie
-const GeometricZombie = ({ color }: { color: string }) => (
-    <group>
-        <mesh castShadow position={[0, 0.9, 0]}>
-            <capsuleGeometry args={[0.25, 0.6, 4, 8]} />
-            <meshStandardMaterial color={color} />
-        </mesh>
-        <mesh castShadow position={[0, 1.5, 0]}>
-            <sphereGeometry args={[0.2, 8, 8]} />
-            <meshStandardMaterial color={color} />
-        </mesh>
-        <mesh position={[0.07, 1.55, 0.15]}>
-            <sphereGeometry args={[0.04, 6, 6]} />
-            <meshBasicMaterial color="#ff0000" />
-        </mesh>
-        <mesh position={[-0.07, 1.55, 0.15]}>
-            <sphereGeometry args={[0.04, 6, 6]} />
-            <meshBasicMaterial color="#ff0000" />
-        </mesh>
-    </group>
-)
 
 const Zombie = ({ id, position, health, playerPosition, type }: EnemyType & { playerPosition: THREE.Vector3 }) => {
   const body = useRef<RapierRigidBody>(null)
@@ -128,7 +107,7 @@ const Zombie = ({ id, position, health, playerPosition, type }: EnemyType & { pl
     }, 100)
     return () => {
       clearTimeout(timer)
-      if (body.current) {
+    if (body.current) {
         // @ts-ignore
         enemyBodyMap.delete(body.current.handle)
       }
@@ -223,7 +202,7 @@ const Zombie = ({ id, position, health, playerPosition, type }: EnemyType & { pl
       <CapsuleCollider args={[0.5 * scale, 0.25 * scale]} position={[0, 0.9 * scale, 0]} />
       
       <group ref={group} scale={scale}>
-          <Suspense fallback={<GeometricZombie color="#3a5a37" />}>
+          <Suspense fallback={null}>
               <ZombieModel animState={animState} scale={scale} />
           </Suspense>
           <HealthBar health={health} maxHealth={maxHealth} yOffset={2.2} />

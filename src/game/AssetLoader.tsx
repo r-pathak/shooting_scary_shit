@@ -92,15 +92,15 @@ export const AssetLoader = () => {
         loadWithTimeout(textureLoader, '/grass_texture.jpeg')
           .then(() => updateProgress('grass texture'))
           .catch(() => updateProgress('grass texture', true))
-      )
+        )
 
       loadPromises.push(
         loadWithTimeout(textureLoader, '/dirt_texture.jpg')
           .then(() => updateProgress('dirt texture'))
           .catch(() => updateProgress('dirt texture', true))
-      )
+        )
 
-      // Load FBX files (zombie animations) - these are large, so they may take time
+        // Load FBX files (zombie animations) - these are large, so they may take time
       loadPromises.push(
         loadWithTimeout(fbxLoader, '/zombie_idle.fbx', undefined, 60000)
           .then(() => updateProgress('zombie_idle'))

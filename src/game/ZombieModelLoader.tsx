@@ -1,6 +1,7 @@
 import { useEffect, useState, createContext, useContext } from 'react'
 import * as THREE from 'three'
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
+import { useStore } from './store'
 
 interface ZombieModelData {
   model: THREE.Group | null
@@ -19,10 +20,17 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
   const [model, setModel] = useState<THREE.Group | null>(null)
   const [animations, setAnimations] = useState<THREE.AnimationClip[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const setZombiesReady = useStore(state => state.setZombiesReady)
 
   useEffect(() => {
     const loader = new FBXLoader()
     const clips: THREE.AnimationClip[] = []
+    
+    const finishLoading = () => {
+      setIsLoading(false)
+      setZombiesReady(true)
+      console.log('Zombie models ready!')
+    }
     
     // Load base model from idle animation (includes mesh)
     loader.load('/zombie_idle.fbx', (fbx) => {
@@ -58,7 +66,7 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
               clips.push(clip)
             }
             setAnimations([...clips])
-            setIsLoading(false)
+            finishLoading()
           }, undefined, (error) => {
             console.warn('Failed to load walk animation:', error)
             // If walk animation doesn't exist, use idle as fallback
@@ -68,7 +76,7 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
               clips.push(walkClip)
             }
             setAnimations([...clips])
-            setIsLoading(false)
+            finishLoading()
           })
         }, undefined, (error) => {
           console.warn('Failed to load die animation:', error)
@@ -79,10 +87,10 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
               clips.push(clip)
             }
             setAnimations([...clips])
-            setIsLoading(false)
+            finishLoading()
           }, undefined, () => {
             setAnimations([...clips])
-            setIsLoading(false)
+            finishLoading()
           })
         })
       }, undefined, (error) => {
@@ -100,21 +108,21 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
               clips.push(clip)
             }
             setAnimations([...clips])
-            setIsLoading(false)
+            finishLoading()
           }, undefined, () => {
             setAnimations([...clips])
-            setIsLoading(false)
+            finishLoading()
           })
         }, undefined, () => {
           setAnimations([...clips])
-          setIsLoading(false)
+          finishLoading()
         })
       })
     }, undefined, (error: unknown) => {
       console.error('Failed to load zombie model:', error)
-      setIsLoading(false)
+      finishLoading()
     })
-  }, [])
+  }, [setZombiesReady])
 
   return (
     <ZombieModelContext.Provider value={{ model, animations, isLoading }}>

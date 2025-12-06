@@ -143,7 +143,7 @@ export const Player = () => {
           
           // Distance from ray to enemy center
           const distanceToRay = closestPoint.distanceTo(enemyPos)
-          
+                  
           // Hit radius based on enemy type - tanks are 1.15x scale so slightly bigger hitbox
           const hitRadius = enemy.type === 'tank' ? 1.0 : (enemy.type === 'runner' ? 0.5 : 0.7)
           
@@ -177,11 +177,11 @@ export const Player = () => {
           } else {
               damage = closestHit.isHeadshot ? stats.damage * 2.5 : stats.damage
           }
-          
+                  
           useStore.getState().damageEnemy(closestHit.id, damage)
-          
+                  
           if (closestHit.isHeadshot && !hasRaygun) {
-              console.log('HEADSHOT!')
+                      console.log('HEADSHOT!')
           }
       }
   }
