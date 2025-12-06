@@ -55,6 +55,23 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
         // Load idle (this has the main model mesh)
         const idleFbx = await loadFBX(loader, '/zombie_idle.fbx')
         idleFbx.scale.setScalar(0.01)
+        
+        // Fix materials to prevent transparency issues
+        idleFbx.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material]
+            materials.forEach((mat) => {
+              if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhongMaterial || mat instanceof THREE.MeshBasicMaterial) {
+                mat.transparent = false
+                mat.depthWrite = true
+                mat.depthTest = true
+                mat.side = THREE.FrontSide
+                mat.needsUpdate = true
+              }
+            })
+          }
+        })
+        
         setModel(idleFbx)
         
         if (idleFbx.animations.length > 0) {
