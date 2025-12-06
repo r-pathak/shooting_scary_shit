@@ -124,8 +124,11 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
                     setAnimations([...clips])
                 })
             })
-        }, undefined, (error) => {
+        }, (progress) => {
+            console.log('Loading zombie_idle.fbx:', progress)
+        }, (error) => {
             console.error('Failed to load zombie model:', error)
+            console.error('Error details:', error.message, error.url)
             // Model will fall back to GeometricZombie
         })
     }, [])
@@ -163,7 +166,10 @@ const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, 
         }
     }, [animState, actions, clone])
     
-    if (!clone) return <GeometricZombie color="#3a5a37" />
+    if (!clone) {
+        console.warn('Zombie model not loaded, using fallback. Model state:', model ? 'loaded' : 'null')
+        return <GeometricZombie color="#3a5a37" />
+    }
     
     return (
         <group ref={groupRef} scale={zombieScale}>
