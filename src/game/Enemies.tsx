@@ -35,15 +35,38 @@ const HealthBar = ({ health, maxHealth, yOffset }: { health: number, maxHealth: 
 
 type AnimState = 'walk' | 'attack' | 'die' | 'idle'
 
+// Helper to fix material transparency issues on cloned models
+const fixMaterials = (object: THREE.Object3D) => {
+    object.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material]
+            materials.forEach((mat: THREE.Material) => {
+                // Force fix on ANY material type
+                mat.transparent = false
+                mat.depthWrite = true
+                mat.depthTest = true
+                mat.side = THREE.FrontSide
+                mat.needsUpdate = true
+                
+                // Additional properties for materials that have them
+                if ('opacity' in mat) (mat as any).opacity = 1
+                if ('alphaTest' in mat) (mat as any).alphaTest = 0
+            })
+        }
+    })
+}
+
 // Zombie model using preloaded shared model
 const ZombieModel = ({ animState, scale: zombieScale }: { animState: AnimState, scale: number }) => {
     const { model, animations, isLoading } = useZombieModel()
     const groupRef = useRef<THREE.Group>(null)
     
-    // Clone for each instance
+    // Clone for each instance and fix materials
     const clone = useMemo(() => {
         if (!model) return null
-        return SkeletonUtils.clone(model)
+        const cloned = SkeletonUtils.clone(model)
+        fixMaterials(cloned)
+        return cloned
     }, [model])
     
     const { actions } = useAnimations(animations, clone || undefined)

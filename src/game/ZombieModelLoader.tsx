@@ -56,21 +56,45 @@ export const ZombieModelProvider = ({ children }: { children: React.ReactNode })
         const idleFbx = await loadFBX(loader, '/zombie_idle.fbx')
         idleFbx.scale.setScalar(0.01)
         
-        // Fix materials to prevent transparency issues
+        // Debug: log the structure of the loaded FBX
+        console.log('FBX structure:')
         idleFbx.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.material) {
+          console.log(`  - ${child.type}: ${child.name}`, child)
+          if ((child as any).material) {
+            console.log(`    HAS MATERIAL:`, (child as any).material)
+          }
+          if ((child as any).isMesh) {
+            console.log(`    isMesh = true`)
+          }
+          if ((child as any).isSkinnedMesh) {
+            console.log(`    isSkinnedMesh = true`)
+          }
+        })
+        
+        // Fix materials to prevent transparency issues (Mixamo FBX default settings cause see-through models)
+        let materialCount = 0
+        idleFbx.traverse((child: any) => {
+          // Check for SkinnedMesh as well as Mesh
+          if ((child.isMesh || child.isSkinnedMesh) && child.material) {
             const materials = Array.isArray(child.material) ? child.material : [child.material]
-            materials.forEach((mat) => {
-              if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhongMaterial || mat instanceof THREE.MeshBasicMaterial) {
-                mat.transparent = false
-                mat.depthWrite = true
-                mat.depthTest = true
-                mat.side = THREE.FrontSide
-                mat.needsUpdate = true
-              }
+            materials.forEach((mat: THREE.Material) => {
+              materialCount++
+              console.log(`Fixing material ${materialCount}: type=${mat.type}, transparent=${mat.transparent}`)
+              
+              // Force fix on ANY material type
+              mat.transparent = false
+              mat.depthWrite = true
+              mat.depthTest = true
+              mat.side = THREE.FrontSide
+              mat.needsUpdate = true
+              
+              // Additional properties for materials that have them
+              if ('opacity' in mat) (mat as any).opacity = 1
+              if ('alphaTest' in mat) (mat as any).alphaTest = 0
             })
           }
         })
+        console.log(`Fixed ${materialCount} materials on zombie model`)
         
         setModel(idleFbx)
         
